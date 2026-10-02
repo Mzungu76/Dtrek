@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, Pencil, ChevronRight, ChevronDown, Settings, Route, Flag, BookOpen } from 'lucide-react'
+import { Loader2, Pencil, ChevronRight, ChevronDown, Settings, Route, Flag, BookOpen, Link2, Copy, Check } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ReportHero from '@/components/resoconto/ReportHero'
 import ReportStatsStrip from '@/components/resoconto/ReportStatsStrip'
@@ -38,6 +38,8 @@ export default function CamminoReportagePage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
   const [manageTitle, setManageTitle] = useState('')
   const [titleSaving, setTitleSaving] = useState(false)
@@ -61,6 +63,27 @@ export default function CamminoReportagePage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
   }
+  // Link pubblico del reportage del cammino: il token sta nel piano, come i testi.
+  async function setShared(enabled: boolean) {
+    if (!hike?.camminoPlan) return
+    setShareBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/cammini/reportage/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hikeId: id, enabled }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Non sono riuscita a aggiornare il link, riprova.')
+      const p = hike.camminoPlan
+      const { shareToken: _t, ...rest } = p.report ?? { chapters: [], updatedAt: new Date().toISOString() }
+      void _t
+      setHike({ ...hike, camminoPlan: { ...p, report: { ...rest, ...(data.token ? { shareToken: data.token as string } : {}) } } })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Non sono riuscita a aggiornare il link, riprova.')
+    } finally { setShareBusy(false) }
+  }
+  async function copyLink(token: string) {
+    const url = `${window.location.origin}/leggi/p/${token}`
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { window.prompt('Copia il link', url) }
+  }
+
   async function saveManageTitle() {
     const t = manageTitle.trim()
     if (!t || !hike || t === hike.title) return
@@ -206,6 +229,23 @@ export default function CamminoReportagePage() {
 
       <main className="mx-auto max-w-3xl px-4 py-5 sm:py-8">
         {error && <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+
+        {/* link pubblico */}
+        <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-stone-200 bg-white px-3.5 py-3">
+          <Link2 className="h-5 w-5 shrink-0 text-forest-700" />
+          {plan.report?.shareToken ? (
+            <>
+              <p className="min-w-0 flex-1 text-[13px] text-stone-600">Il reportage è condiviso con un link pubblico.</p>
+              <button type="button" onClick={() => copyLink(plan.report!.shareToken!)} className="flex items-center gap-1 rounded-full bg-forest-600 px-3 py-1.5 text-[12.5px] font-semibold text-white">{copied ? <><Check className="h-3.5 w-3.5" /> Copiato</> : <><Copy className="h-3.5 w-3.5" /> Copia link</>}</button>
+              <button type="button" disabled={shareBusy} onClick={() => setShared(false)} className="text-[12px] font-semibold text-stone-400 hover:text-stone-600 disabled:opacity-50">Ritira</button>
+            </>
+          ) : (
+            <>
+              <p className="min-w-0 flex-1 text-[13px] text-stone-600">Condividi il reportage con un link pubblico.</p>
+              <button type="button" disabled={shareBusy || !plan.report || (plan.report.chapters.length === 0 && !plan.report.intro)} onClick={() => setShared(true)} className="rounded-full bg-forest-600 px-3.5 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50">{shareBusy ? 'Creo…' : 'Crea il link'}</button>
+            </>
+          )}
+        </div>
 
         <div className="mb-4">
           <CamminoOverviewMap

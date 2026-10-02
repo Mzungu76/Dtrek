@@ -34,6 +34,8 @@ export interface ActivityMetricsRow {
   start_time: string
   /** Assente/null = 'sentiero' (DEFAULT di colonna). */
   meta_type?: string | null
+  /** Valorizzato per le tappe di un cammino: tutte insieme valgono UN solo reportage. */
+  tappa_index?: number | null
 }
 
 /** Riga di `collection_diaries` — lo scaffale (ora una Raccolta, vedi
@@ -95,13 +97,19 @@ export function aggregateDiaries(
   const elevationByDiaryId = new Map<string, number>()
   const lastActivityByDiaryId = new Map<string, string>()
 
+  const camminiCounted = new Set<string>()
   for (const a of activities) {
     const diaryId = a.linked_planned_id ? diaryIdByPlannedId.get(a.linked_planned_id) : null
     if (!diaryId) continue
-    reportageCountByDiaryId.set(diaryId, (reportageCountByDiaryId.get(diaryId) ?? 0) + 1)
+    // Le tappe di un cammino sono capitoli di un solo reportage: contano una volta, non una per tappa.
+    const isTappa = a.tappa_index != null && !!a.linked_planned_id
+    if (!isTappa || !camminiCounted.has(a.linked_planned_id!)) {
+      reportageCountByDiaryId.set(diaryId, (reportageCountByDiaryId.get(diaryId) ?? 0) + 1)
+      if (isTappa) camminiCounted.add(a.linked_planned_id!)
+    }
     // Solo i Reportage con metriche di cammino: distanza e dislivello di una visita a un Borgo/
     // Città o a un Sito non sono chilometri da sommare a quelli dei sentieri.
-    if (!a.meta_type || a.meta_type === 'sentiero') {
+    if (!a.meta_type || a.meta_type === 'sentiero' || a.meta_type === 'cammino') {
       distanceByDiaryId.set(diaryId, (distanceByDiaryId.get(diaryId) ?? 0) + (a.distance_meters ?? 0))
       elevationByDiaryId.set(diaryId, (elevationByDiaryId.get(diaryId) ?? 0) + (a.elevation_gain ?? 0))
     }

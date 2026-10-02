@@ -184,5 +184,7 @@ Scelta dopo i mockup (concept B), con queste regole:
 - **Dove vale.** Sommario del Diario (`/api/diaries/[id]`, riga che apre il reportage del cammino), libro del Diario
   (`/api/diaries/[id]/entries`), Diario pubblico e Raccolte (`lib/sharePublicDiary.ts`), sito dell'utente (`lib/publicProfile.ts`).
 - **Rotella** nel reportage del cammino: titolo e Diario passano dalla Meta (`planned_hikes.diary_id`), come per ogni reportage.
-- **Non ancora:** link di condivisione del singolo reportage del cammino (`/leggi/p/<token>`), conteggio "N reportage" dei Diari
-  (conta ancora le tappe), esclusione delle tappe dal libro PDF.
+- **Link pubblico del reportage del cammino**: `POST /api/cammini/reportage/share` salva il token in `cammino_plan.report.shareToken`;
+  `/leggi/p/<token>` lo legge (`lib/sharePublicReport.ts`). Si crea e si ritira dalla pagina del reportage.
+- **Conteggi**: le tappe contano un solo reportage nelle card dei Diari (`lib/diari/aggregateDiaries.ts`) e i loro km si sommano.
+- **Libro**: la voce del cammino usa foto e traccia di tutte le tappe.

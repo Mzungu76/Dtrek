@@ -235,8 +235,12 @@ export default function DiarioLibroPage() {
       // Load photos + full trackpoints per reported activity, together — chartsAndPhotosReady
       // diventa true solo quando ENTRAMBE le liste sono arrivate, ed è quello che sblocca la
       // pubblicazione (vedi guardia su generateAndUploadPdf).
+      // Voce unica di un cammino (id `cammino:<meta>`): foto e traccia sono quelle di tutte le sue tappe, nell'ordine di marcia.
+      const camminoActIds = (rep: DiaryReport): string[] => rep.id.startsWith('cammino:')
+        ? sortedActs.filter(x => x.linkedPlannedId === rep.id.slice('cammino:'.length) && x.tappaIndex != null).map(x => x.id)
+        : [rep.activity_id]
       const photosPromise = Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
-        try { return [rep.activity_id, await fetchActivityPhotos(rep.activity_id)] }
+        try { return [rep.activity_id, (await Promise.all(camminoActIds(rep).map(id => fetchActivityPhotos(id)))).flat()] }
         catch { return [rep.activity_id, []] }
       })).then(photoEntries => {
         const byAct: Record<string, RoutePhoto[]> = {}
@@ -246,8 +250,8 @@ export default function DiarioLibroPage() {
 
       const trackPointsPromise = Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, TrackPoint[]]> => {
         try {
-          const full = await getActivityById(rep.activity_id)
-          return [rep.activity_id, full?.trackPoints ?? []]
+          const fulls = await Promise.all(camminoActIds(rep).map(id => getActivityById(id)))
+          return [rep.activity_id, fulls.flatMap(f => f?.trackPoints ?? [])]
         } catch { return [rep.activity_id, []] }
       })).then(trackPointEntries => {
         const tpByAct: Record<string, TrackPoint[]> = {}
