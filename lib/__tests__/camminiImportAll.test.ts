@@ -83,3 +83,14 @@ describe('piano Overpass', () => {
     expect(backoffMs(1, 0.999)).toBeLessThan(75_000)
   })
 })
+
+describe('query di download', () => {
+  it('usa solo modi di output validi (niente "out tags members")', async () => {
+    const { rootsQuery, relationsByIdQuery, italyQuery, waysQuery } = await import('../cammini/overpassQueries')
+    const e = REGISTRY.find(x => x.id === 'via-francigena')!
+    for (const q of [rootsQuery(e), relationsByIdQuery([1, 2]), italyQuery([1]), waysQuery([1])]) {
+      expect(q).not.toMatch(/out [a-z ]*members/)
+      expect(q).toMatch(/\nout (body|ids|geom);$/)
+    }
+  })
+})
