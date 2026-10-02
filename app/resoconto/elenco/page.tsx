@@ -6,6 +6,7 @@ import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import RouteThumb from '@/components/RouteThumb'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { findAnniversaries } from '@/lib/stats'
 import type { ResocontoStatus } from '@/app/api/resoconto-status/route'
@@ -171,14 +172,25 @@ export default function ResocontoIndexPage() {
   const [query, setQuery] = useState('')
   const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
+  // Cammini con un reportage in corso: uno per cammino, che cresce tappa dopo tappa.
+  const [camminiReportage, setCamminiReportage] = useState<PlannedHikeMeta[]>([])
+
+  // Le attività delle tappe di un cammino non sono voci a sé: vivono dentro il reportage del cammino.
+  const [tappaActs, setTappaActs] = useState<ActivityMeta[]>([])
+  const applyActs = (l: ActivityMeta[]) => {
+    setActivities(l.filter(a => a.tappaIndex == null))
+    setTappaActs(l.filter(a => a.tappaIndex != null))
+  }
 
   useEffect(() => {
-    getAllActivities(setActivities).then(setActivities).finally(() => setLoading(false))
+    getAllActivities(applyActs).then(applyActs).finally(() => setLoading(false))
     fetch('/api/resoconto-status').then(r => r.ok ? r.json() : {}).then(setReportStatus).catch(() => {})
+    const applyPlanned = (l: PlannedHikeMeta[]) => setCamminiReportage(l.filter(h => h.metaType === 'cammino' && !!h.camminoPlan))
+    getAllPlanned(applyPlanned).then(applyPlanned).catch(() => {})
   }, [])
 
   useEffect(() => {
-    const refresh = () => { getAllActivities(setActivities).then(setActivities).catch(() => {}) }
+    const refresh = () => { getAllActivities(applyActs).then(applyActs).catch(() => {}) }
     window.addEventListener('cts-updated', refresh)
     return () => window.removeEventListener('cts-updated', refresh)
   }, [])
@@ -311,6 +323,32 @@ export default function ResocontoIndexPage() {
 
       {/* ── Main ── */}
       <main className="max-w-[1400px] mx-auto px-4 py-5 sm:py-8">
+        {!loading && camminiReportage.length > 0 && (
+          <div className="mb-5 sm:mb-6 flex flex-col gap-2">
+            {camminiReportage.map(h => {
+              const plan = h.camminoPlan!
+              const mine = tappaActs.filter(a => a.linkedPlannedId === h.id)
+              const doneOrdinals = new Set(mine.map(a => a.tappaIndex))
+              const written = plan.report?.chapters.length ?? 0
+              if (doneOrdinals.size === 0 && written === 0) return null
+              let km = 0
+              doneOrdinals.forEach(o => { km += mine.find(a => a.tappaIndex === o)?.distanceMeters ?? 0 })
+              return (
+                <Link key={h.id} href={`/resoconto/cammino/${encodeURIComponent(h.id)}`}
+                  className="flex items-center gap-3 rounded-2xl border border-forest-200 bg-forest-50 px-4 py-3.5 transition-colors hover:bg-forest-100">
+                  <Mountain className="w-6 h-6 shrink-0 text-forest-700" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-barlow text-[10px] font-bold uppercase tracking-[0.12em] text-forest-700">Reportage del cammino</p>
+                    <p className="truncate font-display text-[16px] font-semibold text-forest-900">{plan.camminoName}</p>
+                    <p className="text-xs text-forest-800">{doneOrdinals.size} di {plan.tappe.length} tappe percorse · {(km / 1000).toFixed(0)} km · {written} {written === 1 ? 'capitolo' : 'capitoli'}</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 shrink-0 text-forest-600" />
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
         {!loading && anniversaries.length > 0 && (
           <div className="mb-5 sm:mb-6 flex flex-col gap-2">
             {anniversaries.map(({ activity, yearsAgo }) => (

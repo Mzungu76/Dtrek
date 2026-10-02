@@ -104,7 +104,14 @@ interface Props {
    *  the observer, so the map never gets stuck rendering tiles for its pre-fullscreen size while
    *  the container is already the new one (leaflet's classic "partial gray map" symptom). */
   resizeSignal?: number
+  /** Tratti colorati sovrapposti al tracciato (es. le tappe di un cammino), ognuno con etichetta numerica sul punto d'arrivo. */
+  overlayTracks?: OverlayTrack[]
+  /** Tocco sul numero (o sul tratto) di un overlayTrack. */
+  onOverlayTap?: (id: string | number) => void
 }
+
+/** `done` true → numero in un quadrato pieno (tratto fatto); false → cerchio vuoto e tratto tratteggiato (da fare); assente → cerchio pieno. */
+export interface OverlayTrack { id: string | number; label: string; color: string; points: [number, number][]; done?: boolean }
 
 // Distanza (metri) tra una freccia di direzione e la successiva — discreta: un tocco che indica
 // il verso, non una sequenza fitta che compete visivamente col tracciato. Alzata da 200 a 400m
@@ -175,6 +182,8 @@ export default function MapView({
   focusSignal,
   showDirectionArrows = false,
   resizeSignal,
+  overlayTracks,
+  onOverlayTap,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<L.Map | null>(null)
@@ -190,10 +199,15 @@ export default function MapView({
   const floraLayer      = useRef<L.Marker[]>([])
   const returnLayer     = useRef<L.Marker[]>([])
   const siteLayer       = useRef<L.Marker[]>([])
+  const overlayLayer    = useRef<any[]>([])
   const activeMarker    = useRef<L.Marker | null>(null)
   const boundsRef       = useRef<L.LatLngBounds | null>(null)
   const transientGradientLayer = useRef<L.Polyline[]>([])
   const [mapReady, setMapReady] = useState(false)
+  // Cambia ad ogni ricostruzione della mappa (es. attivando/disattivando le frecce): i layer sovrapposti vanno ridisegnati sulla nuova istanza.
+  const [mapGen, setMapGen] = useState(0)
+  const onOverlayTapRef = useRef(onOverlayTap)
+  onOverlayTapRef.current = onOverlayTap
 
   const tour = useRouteTour({
     mapInstance, mapReady, trackPoints, pois, poiMarkersRef, enabled: showTourControls,
@@ -230,6 +244,7 @@ export default function MapView({
       const map = L.map(mapRef.current!, { zoomControl: false })
       mapInstance.current = map
       setMapReady(true)
+      setMapGen(g => g + 1)
 
       // Same-origin proxy (cached by the service worker + Next's server-side fetch cache)
       // instead of hitting tile.openstreetmap.org directly on every pan/zoom.
@@ -720,6 +735,36 @@ export default function MapView({
       }
     })
   }, [returnMarkers, mapReady])
+
+  // Tratti colorati (vedi `overlayTracks` nei Props).
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    import('leaflet').then(L => {
+      overlayLayer.current.forEach((l: any) => { try { l.remove() } catch { /* mappa già ricostruita */ } })
+      overlayLayer.current = []
+      if (!mapInstance.current) return
+      for (const t of overlayTracks ?? []) {
+        if (t.points.length < 2) continue
+        const isDone = t.done !== false
+        const line = L.polyline(t.points, { color: t.color, weight: isDone ? 5 : 4, opacity: isDone ? 0.95 : 0.8, dashArray: isDone ? undefined : '2 9', lineCap: isDone ? 'round' : 'butt' }).addTo(mapInstance.current!)
+        line.on('click', () => onOverlayTapRef.current?.(t.id))
+        overlayLayer.current.push(line)
+        const end = t.points[t.points.length - 1]
+        const shape = t.done === true
+          ? `background:${t.color};border-radius:6px;color:#fff;`
+          : t.done === false
+            ? `background:#fff;border-radius:50%;color:${t.color};border-color:${t.color};`
+            : `background:${t.color};border-radius:50%;color:#fff;`
+        const icon = L.divIcon({
+          html: `<div style="width:26px;height:26px;${t.done === false ? 'border:2.5px solid;' : 'border:2px solid #fff;'}${shape}font:700 12px/22px sans-serif;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.45);cursor:pointer;box-sizing:border-box;${t.done === false ? 'line-height:21px;' : ''}">${t.label}</div>`,
+          iconSize: [26, 26], iconAnchor: [13, 13], className: '',
+        })
+        const mk = L.marker(end, { icon, zIndexOffset: 400 }).addTo(mapInstance.current!)
+        mk.on('click', () => onOverlayTapRef.current?.(t.id))
+        overlayLayer.current.push(mk)
+      }
+    })
+  }, [overlayTracks, mapReady, mapGen])
 
   // Pin del Sito (vedi `siteMarker` nei Props).
   useEffect(() => {

@@ -38,6 +38,9 @@ export interface GuideProfile {
 // un sito.
 const HIKING_ONLY_SECTIONS: GuideSectionKey[] = ['dati_sicurezza', 'comfort']
 
+/** Sezioni che per un Cammino non sono un testo unico ma stanno dentro ogni tappa. */
+export const CAMMINO_PER_TAPPA_SECTIONS: GuideSectionKey[] = ['luoghi', 'dati_sicurezza', 'comfort', 'natura', 'sapori']
+
 function availableSectionsFor(exclude: GuideSectionKey[]): GuideSectionKey[] {
   return GUIDE_SECTIONS.map(s => s.key).filter(k => !exclude.includes(k))
 }
@@ -106,9 +109,10 @@ centro storico e vita quotidiana del luogo.`,
   },
   cammino: {
     metaType: 'cammino',
-    // Come un Sentiero (metriche escursionistiche sempre valide, calcolate per tappa) con
-    // l'impianto narrativo a tappe di un Borgo/Città.
-    availableSections: availableSectionsFor([]),
+    // Niente "Tappa per tappa", "Dati e sicurezza", "Su misura per te", natura e sapori come sezioni AI uniche per tutto
+    // il cammino: una sola sezione su 16 tappe superava il budget di token e si troncava; dati,
+    // punteggi e racconto vivono per tappa (CamminoTappeWidget, testo generato su richiesta).
+    availableSections: availableSectionsFor(CAMMINO_PER_TAPPA_SECTIONS),
     sectionOverrides: {
       prima_di_partire: {
         title: 'Prima di partire',

@@ -19,6 +19,8 @@ export interface SaveActivityOptions {
   title?: string
   fileName?: string
   linkedPlannedId?: string
+  /** Cammino: ordinale della tappa percorsa (vedi StoredActivity.tappaIndex). */
+  tappaIndex?: number
   linkedPlannedTrackPoints?: TrackPoint[]
   hikeNotes?: HikeNote[]
   // Travasati dalla Meta collegata (piano Blocco E §30, lib/visitCompletion.ts) — assenti su ogni
@@ -210,6 +212,7 @@ export async function saveActivityWithEnrichment(
     title: opts.title?.trim() || undefined,
     fileName: opts.fileName,
     linkedPlannedId: opts.linkedPlannedId,
+    tappaIndex: opts.tappaIndex,
     linkedPlannedTrackPoints: opts.linkedPlannedTrackPoints,
     hikeNotes: opts.hikeNotes,
     linkedBeautyScore,

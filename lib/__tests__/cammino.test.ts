@@ -17,9 +17,12 @@ describe('MetaType cammino (piano Cammini, Fase 1)', () => {
     expect(metaEligibleForHikingScores({ metaType: 'cammino' })).toBe(true)
   })
 
-  it('la Guida ha tutte le sezioni, con "Tappa per tappa" al posto dei luoghi', () => {
+  it('la Guida non genera in blocco tappe, dati e comfort (stanno per tappa), ma ha il titolo "Tappa per tappa"', () => {
     const profile = guideProfileFor('cammino')
-    expect(profile.availableSections).toContain('dati_sicurezza')
+    expect(profile.availableSections).not.toContain('luoghi')
+    expect(profile.availableSections).not.toContain('dati_sicurezza')
+    expect(profile.availableSections).not.toContain('comfort')
+    expect(profile.availableSections).toContain('il_percorso')
     expect(profile.sectionOverrides?.luoghi?.title).toBe('Tappa per tappa')
     expect(profile.sectionOverrides?.il_percorso?.title).toBe('Il cammino')
   })

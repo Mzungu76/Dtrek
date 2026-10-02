@@ -1,6 +1,6 @@
 'use client'
-import { useState, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { parseTcx, formatDuration, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
@@ -14,6 +14,10 @@ type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | '
 
 export default function ActivityUploader() {
   const router   = useRouter()
+  // Dalla guida di un cammino ("GPX" su una tappa): /upload?planned=<id>&tappa=<ordinale> arriva già collegato.
+  const searchParams = useSearchParams()
+  const presetPlannedId = searchParams.get('planned')
+  const presetTappa = Number(searchParams.get('tappa')) || null
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging,         setDragging]         = useState(false)
   const [status,           setStatus]           = useState<ActivityStatus>('idle')
@@ -26,6 +30,28 @@ export default function ActivityUploader() {
   const [linkMode,         setLinkMode]         = useState<'none' | 'link'>('none')
   const [diaryChoices,     setDiaryChoices]     = useState<DiaryChoice[]>([])
   const [selectedDiaryId,  setSelectedDiaryId]  = useState<string | null>(null)
+  // Cammino: quale tappa del piano ha percorso questo file.
+  const [camminoTappe,     setCamminoTappe]     = useState<{ ordinal: number; label: string }[]>([])
+  const [tappaOrdinal,     setTappaOrdinal]     = useState<number | null>(null)
+
+  // Collegamento preimpostato dalla guida del cammino, appena i percorsi pianificati sono disponibili.
+  useEffect(() => {
+    if (!presetPlannedId || selectedPlanned || plannedHikes.length === 0) return
+    const h = plannedHikes.find(p => p.id === presetPlannedId)
+    if (h) { setLinkMode('link'); setSelectedPlanned(h); setTitleVal(h.title); if (presetTappa) setTappaOrdinal(presetTappa) }
+  }, [presetPlannedId, presetTappa, plannedHikes, selectedPlanned])
+
+  // Un cammino collegato chiede quale tappa: le tappe vengono dal suo piano.
+  useEffect(() => {
+    setCamminoTappe([])
+    if (selectedPlanned?.metaType !== 'cammino') { setTappaOrdinal(null); return }
+    let cancelled = false
+    getPlannedById(selectedPlanned.id).then(full => {
+      if (cancelled || !full?.camminoPlan) return
+      setCamminoTappe(full.camminoPlan.tappe.map(t => ({ ordinal: t.ordinal, label: `${t.fromName ?? 'Partenza'} → ${t.toName ?? 'Arrivo'}` })))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedPlanned?.id, selectedPlanned?.metaType])
 
   const processFile = useCallback(async (file: File) => {
     const ext = file.name.toLowerCase().split('.').pop() ?? ''
@@ -101,9 +127,11 @@ export default function ActivityUploader() {
         linkedPlannedTrackPoints,
         hikeNotes: linkedPlannedNotes,
         diaryId: selectedDiaryId ?? undefined,
+        ...(selectedPlanned?.metaType === 'cammino' && tappaOrdinal != null ? { tappaIndex: tappaOrdinal, metaType: 'cammino' as const } : {}),
       })
       setStatus('success')
-      setTimeout(() => router.push(`/resoconto/${encodeURIComponent(saved.id)}`), 1200)
+      const toCammino = selectedPlanned?.metaType === 'cammino' && tappaOrdinal != null && linkedPlannedId
+      setTimeout(() => router.push(toCammino ? `/resoconto/cammino/${encodeURIComponent(linkedPlannedId!)}` : `/resoconto/${encodeURIComponent(saved.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -326,7 +354,22 @@ export default function ActivityUploader() {
           </div>
         )}
 
-        {selectedPlanned && (
+        {selectedPlanned?.metaType === 'cammino' && camminoTappe.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold text-stone-600 mb-1.5">Quale tappa hai percorso?</p>
+            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+              {camminoTappe.map(t => (
+                <button key={t.ordinal} type="button" onClick={() => setTappaOrdinal(t.ordinal)} title={t.label}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${tappaOrdinal === t.ordinal ? 'bg-forest-600 text-white border-forest-600' : 'bg-white text-stone-600 border-stone-200 hover:border-forest-300'}`}>
+                  Tappa {t.ordinal}
+                </button>
+              ))}
+            </div>
+            {tappaOrdinal != null && <p className="mt-1.5 text-[11px] text-stone-500">{camminoTappe.find(t => t.ordinal === tappaOrdinal)?.label}</p>}
+          </div>
+        )}
+
+        {selectedPlanned && selectedPlanned.metaType !== 'cammino' && (
           <p className="mt-3 text-xs text-sky-700 bg-sky-50 rounded-lg px-3 py-2">
             Il percorso pianificato <strong>«{selectedPlanned.title}»</strong> verrà eliminato dalla lista programma dopo il salvataggio.
           </p>
@@ -336,7 +379,7 @@ export default function ActivityUploader() {
       <div className="flex gap-3">
         <button
           onClick={handleSave}
-          disabled={linkMode === 'link' && !selectedPlanned}
+          disabled={(linkMode === 'link' && !selectedPlanned) || (selectedPlanned?.metaType === 'cammino' && tappaOrdinal == null)}
           className="flex-1 flex items-center justify-center gap-2 py-3 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-semibold transition-colors disabled:opacity-40"
         >
           <CheckCircle className="w-5 h-5" /> Salva escursione

@@ -102,6 +102,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     borgoWalkStops:                row.borgo_walk_stops as PlannedHike['borgoWalkStops'],
     borgoItineraryOverrides:       row.borgo_itinerary_overrides as PlannedHike['borgoItineraryOverrides'],
     borgoDayBudgetMinutes:         row.borgo_day_budget_minutes as number | undefined,
+    camminoPlan:                   row.cammino_plan as PlannedHike['camminoPlan'],
   }
 }
 
@@ -163,6 +164,9 @@ function hikeToRow(h: PlannedHike) {
     latitude:                         h.latitude ?? null,
     longitude:                        h.longitude ?? null,
     parent_meta_id:                   h.parentMetaId ?? null,
+    // Solo quando c'è: la colonna esiste da supabase/migrations/add_cammino_meta_type.sql, ma un
+    // ambiente che non l'ha ancora applicata non deve rompere il salvataggio di OGNI percorso.
+    ...(h.camminoPlan ? { cammino_plan: h.camminoPlan } : {}),
   }
 }
 
@@ -189,7 +193,7 @@ const META_COLS = [
   'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
   'is_sample', 'sample_region', 'meta_type', 'site_type', 'place_id', 'latitude', 'longitude',
-  'parent_meta_id', 'borgo_walk_stops_hash',
+  'parent_meta_id', 'borgo_walk_stops_hash', 'cammino_plan',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
@@ -487,6 +491,7 @@ export async function PATCH(req: NextRequest) {
       borgoWalkStops?: PlannedHike['borgoWalkStops']
       borgoItineraryOverrides?: PlannedHike['borgoItineraryOverrides']
       borgoDayBudgetMinutes?: number
+      camminoPlan?: PlannedHike['camminoPlan']
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -539,6 +544,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.borgoWalkStops               !== undefined) dbPatch.borgo_walk_stops               = patch.borgoWalkStops
     if (patch.borgoItineraryOverrides      !== undefined) dbPatch.borgo_itinerary_overrides      = patch.borgoItineraryOverrides
     if (patch.borgoDayBudgetMinutes        !== undefined) dbPatch.borgo_day_budget_minutes       = patch.borgoDayBudgetMinutes
+    if (patch.camminoPlan                  !== undefined) dbPatch.cammino_plan                   = patch.camminoPlan
 
     // Una Meta camminata/visitata senza Diario renderebbe INVISIBILE il suo Reportage (l'appartenenza
     // passa solo da planned_hikes.diary_id — vedi app/api/diaries/[id]/route.ts). Il client (lib/

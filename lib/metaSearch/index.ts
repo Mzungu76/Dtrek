@@ -3,10 +3,11 @@ import type { MetaSearchParams, MetaSearchResult } from './types'
 import { searchBorghi } from './searchBorghi'
 import { searchSiti } from './searchSiti'
 import { searchSentieri, type FetchHikeCandidates } from './searchSentieri'
+import { searchCammini } from './searchCammini'
 
 export type {
   MetaSearchParams, MetaSearchResult, MetaSearchResultItem, MetaSearchOrigin,
-  BorghiSearchParams, SitiSearchParams, SentieriSearchParams,
+  BorghiSearchParams, SitiSearchParams, SentieriSearchParams, CamminiSearchParams, CamminoStats,
   BorgoInterest, ExperienceType, TimeBudget,
 } from './types'
 export type { ExistingHikeCandidate, FetchHikeCandidates } from './searchSentieri'
@@ -27,6 +28,8 @@ export async function searchMeta(params: MetaSearchParams, deps: SearchMetaDeps)
       return searchBorghi(deps.supabase, params)
     case 'sito':
       return searchSiti(deps.supabase, params)
+    case 'cammino':
+      return searchCammini(deps.supabase, params)
     case 'sentiero':
       if (!deps.fetchHikeCandidates) {
         throw new Error(

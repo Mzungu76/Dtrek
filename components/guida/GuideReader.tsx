@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -55,6 +57,10 @@ import RelatedPlacesWidget from './widgets/RelatedPlacesWidget'
 import OpereMuseoWidget from './widgets/OpereMuseoWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
+import { CamminoOggiCard, CamminoDiario } from './widgets/CamminoOggi'
+import type { TappaDone } from './widgets/CamminoTappaDetail'
+import CamminoOverviewMap from './widgets/CamminoOverviewMap'
+import GuideCamminoStatsStrip from './GuideCamminoStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
 import SectionNav from '@/components/editorial/SectionNav'
 import VoicePlayer from '@/components/editorial/VoicePlayer'
@@ -337,6 +343,38 @@ export default function GuideReader({
   // Guida di Sito aperta nell'overlay (piano §51.4, opzione B — verifica utente 2026-09-27): mai
   // una navigazione, questa stessa Guida di Borgo resta montata sotto per tutto il tempo.
   const [openSiteGuideId, setOpenSiteGuideId] = useState<string | null>(null)
+  const router = useRouter()
+  // Cammino: le tappe già percorse sono quelle con un'attività collegata (registrata col Navigator o
+  // importata da file) — mai dichiarate a mano. ordinale → id dell'attività.
+  const [camminoDone, setCamminoDone] = useState<Record<number, TappaDone>>({})
+  useEffect(() => {
+    if (hike.metaType !== 'cammino') return
+    let cancelled = false
+    const apply = (list: ActivityMeta[]) => {
+      if (cancelled) return
+      const done: Record<number, TappaDone> = {}
+      for (const a of list) {
+        if (a.linkedPlannedId === hike.id && a.tappaIndex != null && !done[a.tappaIndex]) {
+          done[a.tappaIndex] = { activityId: a.id, distanceMeters: a.distanceMeters, totalTimeSeconds: a.totalTimeSeconds, elevationGain: a.elevationGain, startTime: a.startTime }
+        }
+      }
+      setCamminoDone(done)
+    }
+    getAllActivities(apply).then(apply).catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.id, hike.metaType])
+
+  // Azioni comuni delle schermate del cammino: aprire una tappa, navigarla, importarla, aprire il reportage.
+  const camminoNav = (plan: NonNullable<typeof hike.camminoPlan>) => ({
+    plan,
+    hikeId: hike.id,
+    done: camminoDone,
+    onPlanChange: (camminoPlan: NonNullable<typeof hike.camminoPlan>) => onHikeUpdate({ camminoPlan }),
+    onOpenTappa: (ordinal: number) => router.push(`/guida/${encodeURIComponent(hike.id)}/tappa/${ordinal}`),
+    onNaviga: (ordinal: number) => router.push(`/guida/${encodeURIComponent(hike.id)}/naviga?tappa=${ordinal}`),
+    onImporta: (ordinal: number) => router.push(`/upload?tab=activity&planned=${encodeURIComponent(hike.id)}&tappa=${ordinal}`),
+    onOpenReportage: () => router.push(`/resoconto/cammino/${encodeURIComponent(hike.id)}`),
+  })
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
   // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
   // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
@@ -358,8 +396,11 @@ export default function GuideReader({
   // popup "Come percorri questo percorso" — che ha senso solo per un vero cammino a piedi
   // (Sentiero, o Borgo/Città "trekking misto" con una traccia reale) — anche per chi visita
   // semplicemente un borgo o un museo.
+  // Un Cammino a tappe si percorre sempre in un solo verso, scelto nel suo piano (camminoPlan): la
+  // domanda "solo andata o andata e ritorno" non ha senso, e il raddoppio dei km sarebbe un dato falso.
   const isLinearRoute = useMemo(
-    () => metaEligibleForHikingScores({ metaType: hike.metaType, trackPoints: hike.trackPoints, routePolyline: hike.routePolyline })
+    () => hike.metaType !== 'cammino'
+      && metaEligibleForHikingScores({ metaType: hike.metaType, trackPoints: hike.trackPoints, routePolyline: hike.routePolyline })
       && classifyTrackShape(hike.routePolyline ?? []) === 'linear',
     [hike.metaType, hike.trackPoints, hike.routePolyline],
   )
@@ -415,7 +456,7 @@ export default function GuideReader({
     // "Approfondisci con Giulia" su una card che sembra disponibile finirebbe solo in un errore.
     // 'verificato' non è mai gestita dal profilo (resta sempre disponibile, vedi guide/route.ts).
     const fixed: DisplaySection[] = GUIDE_SECTIONS
-      .filter(def => def.key === 'verificato' || guideProfile.availableSections.includes(def.key))
+      .filter(def => def.key === 'verificato' || guideProfile.availableSections.includes(def.key) || (hike.metaType === 'cammino' && def.key === 'luoghi'))
       .map(def => {
         const parsed = byKey.get(def.key)
         const style = SECTION_STYLE[def.key]
@@ -1054,6 +1095,10 @@ export default function GuideReader({
         // Un Borgo/Città "cammino urbano" o un Sito non hanno una traccia GPS da mostrare — mai un
         // RouteMapSection vuoto/rotto al posto del nulla (piano §48.9). "Trekking misto" ha una
         // traccia reale: resta invariato.
+        // Cammino: la mappa d'insieme delle tappe scelte (nessuna traccia GPS unica da mostrare).
+        if (hike.metaType === 'cammino') {
+          return hike.camminoPlan ? <CamminoOverviewMap plan={hike.camminoPlan} done={camminoDone} onOpen={o => router.push(`/guida/${encodeURIComponent(hike.id)}/tappa/${o}`)} /> : null
+        }
         if (hike.metaType !== 'sentiero' && !usesRealTrack) {
           // Verifica post-piano guide-eccellenza: "quando vengono create le schede di Borghi/Siti,
           // la scheda dovrebbe essere già popolata con le info descrittive" — prima, senza una
@@ -1148,6 +1193,11 @@ export default function GuideReader({
         // mostrando "Nessun luogo trovato lungo il percorso" per una Meta senza traccia). "Cosa
         // vedere"/"I luoghi da non perdere" per un Sito resta solo testo narrativo di Giulia.
         if (hike.metaType === 'sito') return null
+        // Cammino: le giornate e le tappe del suo piano (hike.camminoPlan), mai la lista di POI
+        // lungo una traccia che non ha.
+        if (hike.metaType === 'cammino') {
+          return hike.camminoPlan ? <CamminoDiario {...camminoNav(hike.camminoPlan)} /> : null
+        }
         return poiList
           ? (
             <PoiListWidget
@@ -1305,8 +1355,8 @@ export default function GuideReader({
   // Sezioni fisse ancora senza testo — pilota sia il bottone "Genera il resto della guida" (mostrato
   // solo se ce n'è almeno una) sia il calcolo di cosa chiedere quando viene premuto.
   const missingSectionKeys = useMemo(
-    () => displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null && !s.body?.trim()).map(s => s.guideKey),
-    [displaySections],
+    () => displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null && !s.body?.trim() && !(hike.metaType === 'cammino' && s.guideKey === 'luoghi')).map(s => s.guideKey),
+    [displaySections, hike.metaType],
   )
   // Titolo per chiave — per i chip di selezione sotto, dove serve un'etichetta breve per ciascuna
   // sezione ancora mancante (missingSectionKeys porta solo le chiavi, non i titoli già risolti da
@@ -1485,6 +1535,8 @@ export default function GuideReader({
           walkDurationLabel={borgoItinerary ? formatDuration(borgoItinerary.estimatedTimeSeconds) : undefined}
           categoryLabel={META_TYPE_CONFIG.borgo_citta.label}
         />
+      ) : hike.metaType === 'cammino' && hike.camminoPlan ? (
+        <GuideCamminoStatsStrip plan={hike.camminoPlan} />
       ) : (
         <GuideStatsStrip
           distanceKm={effective.distanceMeters / 1000}
@@ -1498,6 +1550,9 @@ export default function GuideReader({
           } : undefined}
         />
       )}
+
+      {/* Cammino: la tappa di oggi (o la prossima) subito sotto le cifre, con CTS, luoghi e Naviga. */}
+      {hike.metaType === 'cammino' && hike.camminoPlan && <CamminoOggiCard {...camminoNav(hike.camminoPlan)} />}
 
       {/* "Vicino a te" (piano §51.6) — solo per una Guida Sito AUTONOMA (una nested ha già il
           richiamo al Borgo sopra, non le serve anche questo); silenzioso da sé se relatedPlaces
@@ -1784,7 +1839,7 @@ export default function GuideReader({
                 // Ogni sezione può essere approfondita singolarmente (app/api/guide/route.ts,
                 // sections) — a differenza di "Genera il resto della guida" che le chiede tutte
                 // insieme. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".
-                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && generatingSections.length === 0
+                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && generatingSections.length === 0 && !(hike.metaType === 'cammino' && s.guideKey === 'luoghi')
                 return (
                   <SectionCard
                     key={s.key}

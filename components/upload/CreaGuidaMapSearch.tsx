@@ -7,11 +7,13 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
   Upload, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
-  Clock, Milestone, Route as RouteIcon, Sliders, Waypoints,
+  Clock, Milestone, Route as RouteIcon, Sliders, Waypoints, Layers, Wand2,
 } from 'lucide-react'
 import type { ResultItem } from './RouteBuilder'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import ItineraryMap from '@/components/mete/ItineraryMap'
+import CamminoSheet from '@/components/mete/CamminoSheet'
+import { MobileNavBar } from '@/components/Navbar'
 import { defaultPendingExpiresAt, type MapView } from './sharedHelpers'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { foundRouteItemFromCachedTrail } from '@/lib/routeBuilder/foundRoute'
@@ -22,6 +24,7 @@ import { ROUTE_COLORS } from '@/lib/designTokens'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import type { TrailNearbyItem } from '@/app/api/trails-nearby/route'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
+import type { CamminoTappaDetail } from '@/app/api/cammini/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 import SentieroGenerationPanel from './SentieroGenerationPanel'
 import PersonalizeItineraryPanel, { type PersonalizeStop } from './PersonalizeItineraryPanel'
@@ -46,6 +49,10 @@ const PLACE_ZOOM = 13
 // zoom di fitBounds sull'anchor+tappe, altrimenti poche tappe molto vicine (es. un piccolo centro
 // storico) farebbero zoomare fino al singolo isolato.
 const PERSONALIZE_MAX_ZOOM = 15
+
+// Altezza del menu inferiore dell'app (MobileNavBar: h-14 + rientro per l'home indicator) — i fogli
+// in basso (risultati, scheda del cammino) stanno SOPRA di esso, non dietro.
+const NAV_BOTTOM = 'calc(3.5rem + env(safe-area-inset-bottom, 0px))'
 
 const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾', cammino: '🧭' }
 
@@ -100,7 +107,7 @@ export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity' | 'manua
  * onOtherWays). Il generatore "su misura" (RouteBuilder.tsx) non è più raggiunto da qui — restava
  * percepito come "torna alla vecchia ricerca", non un'opzione distinta.
  */
-export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, onViewChange, initialPanel, onInitialPanelConsumed }: {
+export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewChange, initialPanel, onInitialPanelConsumed }: {
   onBack: () => void
   onOtherWays?: (mode: OtherWayToAdd) => void
   /** Centro/zoom di partenza (vedi sharedHelpers.ts's MapView) — se assente riparte da ITALY_CENTER/
@@ -151,6 +158,12 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
   const [error, setError] = useState<string | null>(null)
 
   const [selected, setSelected] = useState<Selected | null>(null)
+  // Tappa di un Cammino evidenziata sulla mappa (toccata nell'elenco della scheda del cammino).
+  const [focusedTappa, setFocusedTappa] = useState<CamminoTappaDetail | null>(null)
+  // Altezza del foglio del cammino (CamminoSheet): il tracciato si inquadra nella parte di mappa libera.
+  const [camminoInset, setCamminoInset] = useState(0)
+  // Selezione del pianificatore del cammino (CamminoPlanner), evidenziata sulla mappa mentre si sceglie.
+  const [planPreview, setPlanPreview] = useState<[number, number][] | null>(null)
   const [sheetExpanded, setSheetExpanded] = useState(false)
 
   const [queryText, setQueryText] = useState('')
@@ -187,9 +200,9 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       const radiusKm = center.distanceTo(bounds.getNorthEast()) / 1000
       const origin = { lat: center.lat, lon: center.lng }
 
-      const wantMeta = typeFilter === 'tutto' || typeFilter === 'borgo_citta' || typeFilter === 'sito'
+      const wantMeta = typeFilter === 'tutto' || typeFilter === 'borgo_citta' || typeFilter === 'sito' || typeFilter === 'cammino'
       const wantTrail = typeFilter === 'tutto' || typeFilter === 'sentiero'
-      const metaTypes = typeFilter === 'borgo_citta' || typeFilter === 'sito' ? [typeFilter] as const : ['borgo_citta', 'sito'] as const
+      const metaTypes = typeFilter === 'borgo_citta' || typeFilter === 'sito' || typeFilter === 'cammino' ? [typeFilter] as const : ['borgo_citta', 'sito', 'cammino'] as const
 
       const [metaItems, trailItems] = await Promise.all([
         wantMeta
@@ -329,9 +342,35 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       }
     }
 
+    // Cammini: il tracciato intero come linea (sotto i pin), la tappa evidenziata sopra di esso.
+    if (!personalize) {
+      // Anche il cammino aperto da una ricerca per nome, se non è fra i risultati della vista.
+      const selectedCammino = selected?.kind === 'meta' && selected.item.metaType === 'cammino' ? selected.item : null
+      const camminiToDraw = selectedCammino && !metaResults.some(i => i.id === selectedCammino.id) ? [...metaResults, selectedCammino] : metaResults
+      for (const item of camminiToDraw) {
+        if (item.metaType !== 'cammino' || !item.camminoStats) continue
+        const isSelected = selected?.kind === 'meta' && selected.item.id === item.id
+        const line = L.polyline(item.camminoStats.overviewPolyline, {
+          color: META_TYPE_CONFIG.cammino.color, weight: isSelected ? 5 : 3.5, opacity: isSelected ? 0.9 : 0.75,
+        })
+        line.on('click', () => { setSelected({ kind: 'meta', item }); setSheetExpanded(false) })
+        line.addTo(layer)
+      }
+      if (planPreview && planPreview.length > 1) {
+        L.polyline(planPreview, { color: '#1c1917', weight: 7, opacity: 0.3 }).addTo(layer)
+        L.polyline(planPreview, { color: '#F59E0B', weight: 4.5, opacity: 1 }).addTo(layer)
+      }
+      if (focusedTappa && focusedTappa.polyline.length > 1) {
+        L.polyline(focusedTappa.polyline, { color: '#1c1917', weight: 7, opacity: 0.35 }).addTo(layer)
+        L.polyline(focusedTappa.polyline, { color: '#F59E0B', weight: 4.5, opacity: 1 }).addTo(layer)
+      }
+    }
+
     for (const item of metaResults) {
       const color = META_TYPE_CONFIG[item.metaType].color
       const isSelected = selected?.kind === 'meta' && selected.item.id === item.id
+      // Un cammino non è una tappa selezionabile di un itinerario Borgo/Città.
+      if (personalize && item.metaType === 'cammino') continue
 
       if (personalize) {
         const stopIdx = personalize.stops.findIndex(s => s.id === item.id && s.source === 'meta')
@@ -374,7 +413,28 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
         marker.addTo(layer)
       }
     }
-  }, [metaResults, trailResults, selected, personalize])
+  }, [metaResults, trailResults, selected, personalize, focusedTappa, planPreview])
+
+  // Selezionare un cammino lo inquadra; evidenziare una tappa inquadra quella. Il tracciato va nella
+  // parte di mappa libera: sotto la testata di ricerca, sopra il foglio del cammino (altezza
+  // comunicata da CamminoSheet, che cambia fra stato elenco e stato tappa).
+  useEffect(() => {
+    const map = mapInstance.current
+    const L = leafletRef.current
+    if (!map || !L) return
+    const points = focusedTappa && focusedTappa.polyline.length > 1
+      ? focusedTappa.polyline
+      : planPreview && planPreview.length > 1
+        ? planPreview
+        : selected?.kind === 'meta' && selected.item.camminoStats ? selected.item.camminoStats.overviewPolyline : null
+    if (!points || points.length < 2 || camminoInset === 0) return
+    map.fitBounds(L.latLngBounds(points), {
+      paddingTopLeft: [28, 140], paddingBottomRight: [28, camminoInset + 24], maxZoom: 14,
+    })
+  }, [selected, focusedTappa, camminoInset, planPreview])
+
+  // Cambiare cammino (o chiuderne la scheda) azzera la tappa evidenziata.
+  useEffect(() => { setFocusedTappa(null) }, [selected])
 
   async function handleSearchSubmit() {
     const q = queryText.trim()
@@ -382,6 +442,24 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
     setResolving(true)
     setQueryError(null)
     try {
+      // Un cammino si trova per nome ("Francigena", "San Benedetto"): se c'è, si apre la sua scheda e
+      // il tracciato si inquadra da solo (la ricerca di un luogo parte solo se nessun cammino combacia).
+      if (typeFilter === 'tutto' || typeFilter === 'cammino') {
+        const res = await fetch('/api/meta-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ metaType: 'cammino', query: q, limit: 1 }),
+        })
+        if (res.ok) {
+          const found = ((await res.json()) as { items?: MetaSearchResultItem[] }).items?.[0]
+          if (found) {
+            setMetaResults(prev => (prev.some(i => i.id === found.id) ? prev : [...prev, found]))
+            setSelected({ kind: 'meta', item: found })
+            setSheetExpanded(false)
+            return
+          }
+        }
+      }
       const place = await resolvePlaceClientFirst(q, false)
       if (!place) { setQueryError('Luogo non trovato — prova un altro nome.'); return }
       const map = mapInstance.current
@@ -499,12 +577,14 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
   // mai visitata prima può restare vuota anche a zoom corretto, non è un guasto.
   const trailsEmptyAtThisZoom = wantsTrails && !showTrailZoomHint && !searching && trailResults.length === 0
 
-  const TYPE_FILTERS: { id: TypeFilter; label: string }[] = [
-    { id: 'tutto', label: 'Tutto' },
-    { id: 'sentiero', label: META_TYPE_CONFIG.sentiero.pluralLabel },
-    { id: 'borgo_citta', label: META_TYPE_CONFIG.borgo_citta.pluralLabel },
-    { id: 'sito', label: META_TYPE_CONFIG.sito.pluralLabel },
+  const TYPE_FILTERS: { id: TypeFilter; label: string; icon: typeof Layers; color: string }[] = [
+    { id: 'tutto', label: 'Tutto', icon: Layers, color: '#292524' },
+    { id: 'sentiero', label: 'Sentieri', icon: META_TYPE_CONFIG.sentiero.icon, color: META_TYPE_CONFIG.sentiero.color },
+    { id: 'borgo_citta', label: 'Borghi', icon: META_TYPE_CONFIG.borgo_citta.icon, color: META_TYPE_CONFIG.borgo_citta.color },
+    { id: 'sito', label: 'Siti', icon: META_TYPE_CONFIG.sito.icon, color: META_TYPE_CONFIG.sito.color },
+    { id: 'cammino', label: 'Cammini', icon: META_TYPE_CONFIG.cammino.icon, color: META_TYPE_CONFIG.cammino.color },
   ]
+  const isCamminoSelected = selected?.kind === 'meta' && selected.item.metaType === 'cammino'
 
   return createPortal(
     <div className="fixed inset-0 z-[60] bg-stone-100">
@@ -514,44 +594,51 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
-      {/* ── Header: indietro + barra di ricerca ─────────────────────────── */}
-      <div className="absolute left-0 right-0 top-0 z-10 p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <button onClick={onBack} aria-label="Indietro"
-            className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div className="flex-1 flex items-center gap-2 bg-stone-100 rounded-full px-3.5 py-2.5 min-w-0">
-            {resolving ? <Loader2 className="w-4 h-4 text-stone-400 shrink-0 animate-spin" /> : <SearchIcon className="w-4 h-4 text-stone-500 shrink-0" />}
-            <input
-              value={queryText}
-              onChange={e => { setQueryText(e.target.value); setQueryError(null) }}
-              onKeyDown={e => { if (e.key === 'Enter') handleSearchSubmit() }}
-              placeholder="Borgo, sito o sentiero…"
-              className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-500"
-            />
-            {queryText && (
-              <button onClick={() => { setQueryText(''); setQueryError(null) }} aria-label="Cancella ricerca" className="text-stone-400 shrink-0">
-                <XIcon className="w-3.5 h-3.5" />
-              </button>
-            )}
+      {/* ── Header: ricerca + filtro per tipologia, centrati ─────────────────────────────────
+          Schede bianche con ombra morbida sopra la mappa. L'uscita dalla schermata è il menu
+          inferiore dell'app (niente più freccia "indietro" in alto). Il filtro è un controllo
+          compatto a icone colorate (stesso colore e icona dei pin): solo la voce attiva mostra il
+          nome, così le cinque tipologie entrano in una riga senza scorrere né tagliare il testo. ── */}
+      <div className="absolute left-0 right-0 top-0 z-10 p-3 space-y-2 pointer-events-none">
+        <div className="pointer-events-auto max-w-xl mx-auto h-11 flex items-center gap-2.5 bg-white rounded-full pl-4 pr-2 shadow-md border border-stone-200/70 transition focus-within:border-forest-400 focus-within:ring-2 focus-within:ring-forest-200/70">
+          {resolving ? <Loader2 className="w-[18px] h-[18px] text-forest-600 shrink-0 animate-spin" /> : <SearchIcon className="w-[18px] h-[18px] text-forest-700 shrink-0" />}
+          <input
+            value={queryText}
+            onChange={e => { setQueryText(e.target.value); setQueryError(null) }}
+            onKeyDown={e => { if (e.key === 'Enter') handleSearchSubmit() }}
+            placeholder="Cerca un luogo o un cammino…"
+            enterKeyHint="search"
+            className="flex-1 min-w-0 bg-transparent text-[14px] text-stone-800 outline-none placeholder:text-stone-400"
+          />
+          {queryText && (
+            <button onClick={() => { setQueryText(''); setQueryError(null) }} aria-label="Cancella ricerca"
+              className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-500 shrink-0 transition-colors">
+              <XIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex justify-center">
+          <div role="group" aria-label="Tipologia"
+            className="pointer-events-auto inline-flex items-center gap-1 bg-white rounded-full p-1 shadow-md border border-stone-200/70">
+            {TYPE_FILTERS.map(f => {
+              const active = typeFilter === f.id
+              const Icon = f.icon
+              return (
+                <button key={f.id} type="button" aria-pressed={active} aria-label={f.label} title={f.label}
+                  onClick={() => { setTypeFilter(f.id); setSelected(null) }}
+                  className={`h-9 rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 ${active ? 'px-3.5 text-white' : 'w-9 text-stone-500 hover:bg-stone-100'}`}
+                  style={active ? { background: f.color } : undefined}>
+                  <Icon className="w-[17px] h-[17px] shrink-0" style={active ? undefined : { color: f.color }} />
+                  {active && <span className="text-xs font-bold whitespace-nowrap">{f.label}</span>}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* Filtro per tipo — controllo segmentato a piena larghezza (stesso sfondo piatto stone-100
-            della barra di ricerca sopra), non più una pillola centrata larga solo quanto il testo:
-            più leggibile e coerente con la barra. */}
-        <div className="flex bg-stone-100 rounded-full p-1 gap-1">
-          {TYPE_FILTERS.map(f => (
-            <button key={f.id} type="button" onClick={() => { setTypeFilter(f.id); setSelected(null) }}
-              className={`flex-1 py-1.5 rounded-full text-xs font-semibold text-center transition-colors ${typeFilter === f.id ? 'bg-stone-900 text-white' : 'text-stone-700'}`}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-
         {queryError && (
-          <p className="text-center text-[11px] font-medium text-red-600 bg-white/95 backdrop-blur rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
+          <p className="pointer-events-auto text-center text-[11px] font-medium text-red-600 bg-white rounded-full py-1.5 px-3 mx-auto w-fit shadow-md">
             {queryError}
           </p>
         )}
@@ -561,8 +648,8 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           Komoot, stesso di MeteSearchMap.tsx), mai a ogni pan/zoom automatico. Nascosto durante la
           personalizzazione di un itinerario Borgo/Città: lì un pan/zoom non deve riavviare la
           ricerca normale, solo la vista sull'anchor+tappe. ─────────────────────────────────────── */}
-      {dirty && !personalize && (
-        <div className="absolute left-0 right-0 top-[112px] z-10 flex justify-center">
+      {dirty && !personalize && !isCamminoSelected && (
+        <div className="absolute left-0 right-0 top-[120px] z-10 flex justify-center">
           <button onClick={searchCurrentView} disabled={searching}
             className="flex items-center gap-2 bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-lg disabled:opacity-70 transition-colors">
             {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -572,7 +659,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       )}
 
       {showTrailZoomHint && !personalize && (
-        <div className="absolute left-0 right-0 z-10 flex justify-center" style={{ top: dirty ? '158px' : '112px' }}>
+        <div className="absolute left-0 right-0 z-10 flex justify-center" style={{ top: dirty ? '166px' : '120px' }}>
           <p className="bg-white/90 backdrop-blur text-stone-500 text-[11px] px-3 py-1.5 rounded-full shadow border border-stone-200">
             Avvicinati per vedere anche i Sentieri
           </p>
@@ -580,7 +667,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       )}
 
       {error && !personalize && (
-        <div className="absolute left-3 right-3 top-[160px] z-10 bg-red-500/95 backdrop-blur rounded-xl px-3 py-2 shadow-md text-center">
+        <div className="absolute left-3 right-3 top-[168px] z-10 bg-red-500/95 backdrop-blur rounded-xl px-3 py-2 shadow-md text-center">
           <p className="text-xs text-white">{error}</p>
         </div>
       )}
@@ -602,7 +689,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           <button onClick={() => { setShowOtherWays(false); setShowGenChooser(true) }}
             title="Genera un percorso" aria-label="Genera un percorso"
             className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showGenChooser || showSentieroGen || personalize ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
-            <RouteIcon className="w-[18px] h-[18px]" />
+            <Wand2 className="w-[18px] h-[18px]" />
           </button>
           {onOtherWays && (
             <button onClick={() => { setShowGenChooser(false); setShowSentieroGen(false); setPersonalize(null); setShowOtherWays(true) }}
@@ -618,11 +705,21 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           parte): foto o mappa del tracciato in testa, informazioni sotto (a tab quando ce n'è
           abbastanza da separare), "Crea guida" come unica azione in fondo. Sfondo scurito/sfocato
           dietro, per dargli risalto sulla mappa — tocco fuori per chiudere, come gli altri fogli. */}
-      {selected && (
+      {selected && !isCamminoSelected && (
         <div className="fixed inset-0 z-[15] bg-stone-900/30 backdrop-blur-[2px]" onClick={() => setSelected(null)} />
       )}
-      {selected && (
-        <div className="absolute left-3 right-3 z-20" style={{ top: '112px' }}>
+      {selected?.kind === 'meta' && isCamminoSelected && (
+        <CamminoSheet
+          item={selected.item}
+          focusedOrdinal={focusedTappa?.ordinal ?? null}
+          onFocusTappa={setFocusedTappa}
+          onClose={() => setSelected(null)}
+          onInset={setCamminoInset}
+          onPreview={setPlanPreview}
+        />
+      )}
+      {selected && !isCamminoSelected && (
+        <div className="absolute left-3 right-3 z-20" style={{ top: '120px' }}>
           <div className="relative bg-white/97 backdrop-blur rounded-2xl shadow-lg max-w-sm mx-auto overflow-hidden">
             <div className="overflow-y-auto" style={{ maxHeight: 'min(66vh, 560px)' }}>
               {selected.kind === 'meta' ? (
@@ -654,9 +751,9 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           durante la personalizzazione di un itinerario o "Genera un sentiero qui": PersonalizeItineraryPanel
           e SentieroGenerationPanel occupano lo stesso angolo basso-fisso dello schermo, due banner lì
           insieme si sovrapporrebbero. ──────────────────────────────────────────────────────────── */}
-      {!personalize && !showSentieroGen && (
+      {!personalize && !showSentieroGen && !isCamminoSelected && (
       <div className="absolute left-0 right-0 bottom-0 z-10 bg-white rounded-t-3xl shadow-[0_-6px_20px_rgba(0,0,0,.12)] flex flex-col"
-        style={{ maxHeight: sheetExpanded ? '58vh' : '96px' }}>
+        style={{ maxHeight: sheetExpanded ? '58vh' : '96px', bottom: NAV_BOTTOM }}>
         <button onClick={() => setSheetExpanded(v => !v)}
           className="shrink-0 flex flex-col items-center pt-2.5 pb-2.5 w-full">
           <span className="w-9 h-1 rounded-full bg-stone-200 mb-2.5" />
@@ -765,6 +862,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           </div>
         </>
       )}
+
+      {/* ── Menu dell'app — stessa barra delle altre pagine, per uscire da qui o andare altrove.
+          z-30: sotto i fogli modali (z-40: Personalizza, Genera, Porta i tuoi dati), sopra la mappa
+          e i fogli dei risultati, che stanno appoggiati sopra di essa (NAV_BOTTOM). ──────────── */}
+      <MobileNavBar className="fixed inset-x-0 bottom-0 z-30" showAvatar={false} safeAreaTop={false} safeAreaBottom activeHref="/guida" />
     </div>,
     document.body,
   )
@@ -1104,18 +1206,23 @@ function TrailDetailCard({ item, saving, onCreate, error }: { item: TrailNearbyI
 
 function MetaRow({ item, creating, onCreate, onSelect }: { item: MetaSearchResultItem; creating: boolean; onCreate: () => void; onSelect: () => void }) {
   const location = [item.municipality, item.province].filter(Boolean).join(', ')
+  const isCammino = item.metaType === 'cammino' && !!item.camminoStats
+  // Un cammino non si crea con un tap dall'elenco: prima se ne guardano le tappe nella scheda.
+  const subtitle = isCammino
+    ? `${item.camminoStats!.structure === 'rete' ? 'Rete di cammini' : META_TYPE_CONFIG.cammino.label} · ${(item.camminoStats!.lengthM / 1000).toFixed(0)} km · ${item.camminoStats!.tappeCount} tappe${item.distanceKm != null ? ` · a ${item.distanceKm.toFixed(0)} km` : ''}`
+    : `${META_TYPE_CONFIG[item.metaType].label}${location ? ` · ${location}` : ''}${item.distanceKm != null ? ` · ${item.distanceKm.toFixed(1)} km` : ''}`
   return (
     <div className="flex items-center gap-3 bg-stone-50 border border-stone-100 rounded-2xl p-2.5">
       <button onClick={onSelect} className="flex-1 min-w-0 flex items-center gap-3 text-left">
         <span className="text-xl shrink-0" aria-hidden>{GLYPH[item.metaType]}</span>
         <span className="min-w-0">
           <span className="block text-[13px] font-bold text-stone-800 truncate">{item.name}</span>
-          <span className="block text-[11px] text-stone-400 truncate">{META_TYPE_CONFIG[item.metaType].label}{location ? ` · ${location}` : ''}{item.distanceKm != null ? ` · ${item.distanceKm.toFixed(1)} km` : ''}</span>
+          <span className="block text-[11px] text-stone-400 truncate">{subtitle}</span>
         </span>
       </button>
-      <button onClick={onCreate} disabled={creating}
+      <button onClick={isCammino ? onSelect : onCreate} disabled={creating}
         className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-white bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-full px-3 py-1.5 transition-colors">
-        {creating && <Loader2 className="w-3 h-3 animate-spin" />} Crea
+        {creating && <Loader2 className="w-3 h-3 animate-spin" />} {isCammino ? 'Apri' : 'Crea'}
       </button>
     </div>
   )

@@ -99,6 +99,8 @@ interface Props {
   locationProviderFactory?: import('@/lib/native/locationSource').LocationProviderFactory
   /** Label shown in a persistent "SIMULAZIONE" banner whenever locationProviderFactory is set — the position on screen is never allowed to look like a real fix when it isn't one. */
   simulationLabel?: string
+  /** Cammino: ordinale della tappa che si sta registrando (dtrek_cammino_tappe.ordinal). L'attività salvata la porta con sé: è così che la tappa risulta percorsa. */
+  tappaOrdinal?: number
 }
 
 const AUTO_HIDE_MS = 6000 // "nascondi controlli" automatico: inattività prima di lasciare solo la mappa
@@ -147,7 +149,7 @@ function NavPanelCompoundRow({ label, children }: { label: string; children: Rea
   )
 }
 
-export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel }: Props) {
+export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel, tappaOrdinal }: Props) {
   const router = useRouter()
   // Questo componente serve sia Dtrek (web) sia la navigazione GPS nativa di Navigator, stessa
   // route condivisa /guida/[id]/naviga (lib/navigatorAllowedPaths.ts). A fine escursione, senza
@@ -1081,6 +1083,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     const saved = await saveActivityWithEnrichment(pendingActivity, {
       title,
       linkedPlannedId: hike.id,
+      ...(tappaOrdinal != null ? { tappaIndex: tappaOrdinal, metaType: 'cammino' as const } : {}),
       linkedPlannedTrackPoints: (hike.trackPoints ?? []).filter((p) => p.lat && p.lon),
       hikeNotes,
       diaryId,
@@ -1108,7 +1111,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       setSaveOfflineNotice(true)
       await new Promise((r) => setTimeout(r, 1800))
     }
-    router.push(isNativeApp ? '/navigatore' : `/resoconto/${encodeURIComponent(saved.id)}`)
+    // Una tappa di cammino porta al reportage unico del cammino, dove la tappa è già un capitolo da scrivere.
+    router.push(isNativeApp ? '/navigatore' : tappaOrdinal != null ? `/resoconto/cammino/${encodeURIComponent(hike.id)}` : `/resoconto/${encodeURIComponent(saved.id)}`)
   }
 
   const handleDiscardRecordedActivity = () => {

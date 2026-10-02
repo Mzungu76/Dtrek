@@ -74,7 +74,32 @@ export interface SentieriSearchParams {
   buildParams: Record<string, unknown>
 }
 
-export type MetaSearchParams = BorghiSearchParams | SitiSearchParams | SentieriSearchParams
+// Cammini (docs/piano-cammini.md, Fase 3): letti da dtrek_places (meta_type='cammino'), importati
+// offline da scripts/places/cammini. Solo quelli con qualità "pronto" sono visibili agli utenti.
+export interface CamminiSearchParams {
+  metaType: 'cammino'
+  query?: string
+  region?: string
+  origin?: MetaSearchOrigin
+  /** Un cammino è "nella zona" se il suo tracciato passa entro questo raggio dall'origine. */
+  maxDistanceKm?: number
+  limit?: number
+  /** Solo per revisione interna: include anche i cammini "da rivedere". */
+  includeNotReady?: boolean
+}
+
+export type MetaSearchParams = BorghiSearchParams | SitiSearchParams | SentieriSearchParams | CamminiSearchParams
+
+export interface CamminoStats {
+  lengthM: number
+  tappeCount: number
+  tappeSource: 'official' | 'computed' | 'mixed'
+  /** 'rete': centinaia di tappe, l'utente ne sceglie un tratto. Default 'cammino'. */
+  structure: 'cammino' | 'rete'
+  quality: 'pronto' | 'da_rivedere'
+  /** Panoramica del tracciato per la mappa, [lat, lon][] già semplificata. */
+  overviewPolyline: [number, number][]
+}
 
 // Un risultato normalizzato, sufficiente per una card (piano §24) — mai con campi vuoti
 // fabbricati: un campo assente resta `undefined`, la UI decide se ometterlo (vedi metaCard.ts).
@@ -107,6 +132,9 @@ export interface MetaSearchResultItem {
     trailScore?: number
     safetyScore?: number
   }
+
+  /** Solo per Cammini. */
+  camminoStats?: CamminoStats
 
   sourceCount: number
   confidence: number

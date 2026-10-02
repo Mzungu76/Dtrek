@@ -46,6 +46,8 @@ export interface StoredActivity extends TcxActivity {
   userRating?: number
   userRatingNote?: string
   linkedPlannedId?: string
+  /** Cammino: ordinale della tappa (dtrek_cammino_tappe.ordinal) percorsa da questa attività. */
+  tappaIndex?: number
   linkedPlannedTrackPoints?: TrackPoint[]
   soddisfazione?: number  // satisfaction 1–10
   linkedBeautyScore?: BeautyScore
@@ -136,6 +138,8 @@ export interface ActivityMeta {
    *  disponibile solo su StoredActivity (il resoconto aperto), che avrebbe richiesto una fetch
    *  pesante per ogni elemento della lista solo per sapere a quale Diario appartiene. */
   linkedPlannedId?: string
+  /** Cammino: ordinale della tappa percorsa (vedi StoredActivity.tappaIndex). */
+  tappaIndex?: number
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -175,6 +179,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     siteType:        a.siteType,
     verified:        a.verified,
     linkedPlannedId: a.linkedPlannedId,
+    tappaIndex:      a.tappaIndex,
   }
 }
 

@@ -507,7 +507,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     // altre Mete della galleria non c'entrano nulla con quel caricamento.
     if (metaList.length === 0) return
     const pending = metaList.filter(h =>
-      h.metaType && h.metaType !== 'sentiero' && h.placeId && !attemptedPlaceDetailRef.current.has(h.id),
+      h.metaType && h.metaType !== 'sentiero' && h.metaType !== 'cammino' && h.placeId && !attemptedPlaceDetailRef.current.has(h.id),
     )
     if (pending.length === 0) return
     for (const h of pending) attemptedPlaceDetailRef.current.add(h.id)
@@ -1263,6 +1263,9 @@ export default function GuidaHub({ id }: { id?: string }) {
   }
 
   const primaryAction = (routeItem: RouteHubItem): PrimaryAction | null => {
+    // Un Cammino si naviga una tappa alla volta, dalla sua scheda ("Naviga" sulla tappa di oggi o dal
+    // dettaglio di ogni tappa): mai un unico "Naviga" per l'intero cammino.
+    if (routeItem.metaType === 'cammino' || (routeItem.id === hike?.id && hike.metaType === 'cammino')) return null
     // Per l'hike davvero aperto (unico per cui hike.routePolyline/borgoWalkPolyline sono già in
     // memoria, stesso motivo di scoreGaugeBadge sopra) niente bottone "Naviga" quando non c'è
     // proprio nulla da seguire — un Borgo/Città cammino_urbano il cui itinerario a piedi non è

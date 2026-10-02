@@ -1,3 +1,4 @@
+import type { CamminoPlan } from './cammini/plan'
 import type { TrackPoint } from './tcxParser'
 import type { HikeAssessment } from './hikeAssessment'
 import { lsGet, lsSet, lsDel, LS_KEYS, obEnqueue } from './localStore'
@@ -201,6 +202,9 @@ export interface PlannedHike {
   // azzerarsi (SET NULL) se la Guida madre viene cancellata — quella del Sito sopravvive e torna
   // autonoma, mai cancellata a cascata.
   parentMetaId?:                 string
+  // Piano di un Cammino scelto dall'utente (docs/piano-cammini.md, Fase 4): tappe incluse, verso,
+  // giornate, date. Valorizzato solo quando metaType === 'cammino'.
+  camminoPlan?:                  CamminoPlan
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -385,7 +389,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash' | 'borgoWalkTappaEnds' | 'borgoWalkStops' | 'borgoItineraryOverrides' | 'borgoDayBudgetMinutes'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash' | 'borgoWalkTappaEnds' | 'borgoWalkStops' | 'borgoItineraryOverrides' | 'borgoDayBudgetMinutes' | 'camminoPlan'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })

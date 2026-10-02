@@ -1,3 +1,4 @@
+import { camminoMetricsBlock, camminoTappeBlock } from '@/lib/cammini/guideBlocks'
 import { NextRequest } from 'next/server'
 import Anthropic        from '@anthropic-ai/sdk'
 import { supabase }     from '@/lib/supabase'
@@ -582,7 +583,12 @@ function buildPrompt(
       ? 'TIPOLOGIA: sola andata (punto di partenza e punto di arrivo sono diversi; chi cammina non torna sui propri passi)\n'
       : ''
 
-  const hikingMetricsBlock = hikingMetrics
+  // Un Cammino non ha traccia GPS né quote: le sue cifre vengono dal piano (tappe, giornate, km),
+  // mai da distanza/dislivello a zero.
+  const camminoPlan = hike.metaType === 'cammino' ? hike.camminoPlan : undefined
+  const hikingMetricsBlock = camminoPlan
+    ? camminoMetricsBlock(camminoPlan)
+    : hikingMetrics
     ? `${routeModeLine}DISTANZA: ${(effective.distanceMeters / 1000).toFixed(1)} km
 DISLIVELLO POSITIVO: ${Math.round(effective.elevationGain)} m
 DISLIVELLO NEGATIVO: ${Math.round(effective.elevationLoss)} m
@@ -607,7 +613,9 @@ ${dateStr ? `DATA: ${dateStr}` : ''}
 ${hikingMetricsBlock}
 ${comfortContext ? `PROFILO E STORICO DI QUESTO ESCURSIONISTA (usali SOLO per la sezione "Su misura per te"):\n${comfortContext}` : ''}
 
-${borgoStopsBlock
+${camminoPlan
+    ? `TAPPE DEL CAMMINO, NELL'ORDINE DI MARCIA SCELTO DALL'UTENTE (usale come base per la sezione tappa-per-tappa — segui QUESTO ordine):\n${camminoTappeBlock(camminoPlan)}\n`
+    : ''}${borgoStopsBlock
     ? `TAPPE DEL BORGO/CITTÀ, GIÀ ORDINATE A PIEDI DAL CENTRO (usale come base per la sezione tappa-per-tappa — segui QUESTO ordine, non inventarne uno diverso):\n${borgoStopsBlock}`
     : `LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):\n${wikiBlock}\n${rawOnly ? `\nALTRI PUNTI DI INTERESSE OSM:\n${rawOnly}` : ''}`}
 ${hike.userNotes ? `\nNOTE DEL PROPRIETARIO DEL PERCORSO:\n${hike.userNotes}` : ''}
@@ -969,6 +977,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         siteType:             inferSiteTypeFromName(data.title, data.site_type ?? undefined),
         latitude:             data.latitude             ?? undefined,
         longitude:            data.longitude            ?? undefined,
+        camminoPlan:          data.cammino_plan         ?? undefined,
       }
 
       scores = {

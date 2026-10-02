@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass, Navigation } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
+import type { OverlayTrack } from '@/components/MapView'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
@@ -28,6 +29,12 @@ interface Props {
   /** Mostra i pin dei POI sulla mappa — disattivato nella sezione "Il percorso" della guida (i
    *  POI hanno una mappa dedicata in "I luoghi da non perdere"), attivo per default altrove. */
   showPois?: boolean
+  /** Mostra il profilo altimetrico sotto la mappa (default sì) — spento quando la traccia non ha quote (es. mappa d'insieme di un cammino). */
+  showProfile?: boolean
+  /** Tratti colorati (tappe) disegnati sopra la traccia, che resta sullo sfondo più tenue. */
+  overlayTracks?: OverlayTrack[]
+  /** Scheda mostrata sopra la mappa (anche a schermo intero) quando si tocca un overlayTrack. */
+  overlayCard?: (id: string | number, close: () => void) => ReactNode
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -43,8 +50,9 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function RouteMapSection({
   trackPoints, pois = [], highlightedPoiIndices = null, onPoiTap, onOpenMap3D,
-  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true,
+  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true, showProfile = true, overlayTracks, overlayCard,
 }: Props) {
+  const [selectedOverlay, setSelectedOverlay] = useState<string | number | null>(null)
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
@@ -91,6 +99,9 @@ export default function RouteMapSection({
           fitSignal={fitTick}
           showDirectionArrows={showArrows}
           resizeSignal={resizeTick}
+          overlayTracks={overlayTracks}
+          onOverlayTap={overlayCard ? id => setSelectedOverlay(cur => (cur === id ? null : id)) : undefined}
+          routeOpacity={overlayTracks?.length ? 0.25 : undefined}
         />
         <div
           className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
@@ -135,8 +146,19 @@ export default function RouteMapSection({
             {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
           </button>
         </div>
+        {selectedOverlay == null && overlayTracks?.some(t => t.done != null) && (
+          <div className="absolute left-3 z-[1000] flex items-center gap-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow" style={{ bottom: fullscreen ? 'calc(env(safe-area-inset-bottom, 0px) + 12px)' : '12px' }}>
+            <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-[3px] bg-stone-700" /> fatta</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full border-2 border-stone-700 bg-white" /> da fare</span>
+          </div>
+        )}
+        {overlayCard && selectedOverlay != null && (
+          <div className="absolute inset-x-3 bottom-3 z-[1001]" style={fullscreen ? { bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' } : undefined}>
+            {overlayCard(selectedOverlay, () => setSelectedOverlay(null))}
+          </div>
+        )}
       </div>
-      <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
+      {showProfile && <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />}
     </div>
   )
 }
