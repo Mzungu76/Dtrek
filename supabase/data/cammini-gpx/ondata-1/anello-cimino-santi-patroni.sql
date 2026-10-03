@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Anello Cimino — Cammino dei Santi Patroni$q$, 'cammino', 42.346424320712686, 12.253818064928055, $q$Lazio$q$, 'gpx', 'cammino/anello-cimino-santi-patroni', 0.9,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Anello Cimino — Cammino dei Santi Patroni$q$, 'cammino', 42.346424320712686, 12.253818064928055, $q$Lazio$q$, $q$https://www.anellocimino.itolomeo.com/$q$, 'gpx', 'cammino/anello-cimino-santi-patroni', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":55562,"tappeCount":3,"tappeSource":"official","start":{"name":"Viterbo","lat":42.41456282325089,"lon":12.109956191852689},"end":{"name":"Viterbo","lat":42.41419653408229,"lon":12.110312506556511},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":3,"totalKm":57.7,"connected":true,"maxTappaKm":21.7,"namedShare":1,"officialTappe":3,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$_b{aGgf|hAkh@`AqA}Wtn@efDpI_qB~g@uhAxf@qJp]y}@pLfCfHmf@fl@w^ru@uvD{Cqj@giA_jAkMya@cFosAz[inAgQ{dAt^~Yp@lbBbe@|GlUp}@~xBdoB|Nm@vb@_uBvFbb@fAoa@|~@olAnNoFVdR|eA_Okf@x~@pStx@}I|YvIRuZ|_@qRhfBhWjn@}gAv^pUlIv@fQ}u@xh@gIf]wg@bKq^lz@tG~Vsq@pyBmuApj@s]v`@e[`A{N~f@ylA~w@s]rkAel@xh@$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

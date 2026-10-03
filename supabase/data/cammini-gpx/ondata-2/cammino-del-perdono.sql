@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino del Perdono — Sui passi di Celestino$q$, 'cammino', 42.183221, 13.703627, $q$Abruzzo$q$, 'gpx', 'cammino/cammino-del-perdono', 0.75,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino del Perdono — Sui passi di Celestino$q$, 'cammino', 42.183221, 13.703627, $q$Abruzzo$q$, $q$https://camminodelperdono.it/$q$, 'gpx', 'cammino/cammino-del-perdono', 0.75,
     $q${"kind":"cammino","theme":"religioso","lengthM":75163,"tappeCount":4,"tappeSource":"official","start":{"name":null,"lat":42.342899,"lon":13.404133},"end":{"name":"Sulmona","lat":42.054614,"lon":13.9202},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":4,"totalKm":75.8,"connected":true,"maxTappaKm":22.7,"namedShare":0.75,"officialTappe":0,"computedTappe":4,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$cbmaGy~xpAiH{[bX~Mto@k_AlPqv@qOsDY}`@rd@_dCde@oeA{GclAda@ad@pp@msBb[yFf@k[d^{Rve@qcChkBcg@mKkOhu@seA|i@cL{FgMvh@_WtZcm@h_AyPthAi_DiBiq@f`@ae@sFhl@nPwVtiBcxEhKybAvh@ws@zg@crA{CeTxTmJjI}`AmGkUdt@yeBdzB_mAdn@xUjt@ix@dqAoPqB|SnnCm{Bl`AqyAjoAaYqHeFfJa`@vZwChCyR}K_AuHoi@{dA^gAol@{o@oXtHkTuTkn@rIay@nZbKzV{Qfj@ywCka@sd@`g@uz@suAmrBdv@z`@ts@{m@|RpSjWqOjcBctB}H{c@hUax@}GuJ|]{u@$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

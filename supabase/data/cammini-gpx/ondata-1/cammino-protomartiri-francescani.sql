@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino dei Protomartiri Francescani$q$, 'cammino', 42.48406292183478, 12.49489050555363, $q$Umbria$q$, 'gpx', 'cammino/cammino-protomartiri-francescani', 0.9,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino dei Protomartiri Francescani$q$, 'cammino', 42.48406292183478, 12.49489050555363, $q$Umbria$q$, $q$https://www.camminoprotomartiri.it/$q$, 'gpx', 'cammino/cammino-protomartiri-francescani', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":101382,"tappeCount":6,"tappeSource":"official","start":{"name":"Terni","lat":42.5327011489309,"lon":12.66288431183612},"end":{"name":"Terni","lat":42.56746038793724,"lon":12.65287457362503},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":6,"totalKm":103.7,"connected":true,"maxTappaKm":28.5,"namedShare":1,"officialTappe":6,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$kdrbG_fhlApj@oj@xe@tg@|g@~E{TadApEa~@rHlt@bo@gO}Ide@hWhv@hb@JnPht@ppAjJra@`|AyEbkAnZ~YwC~TdPzR|`Azp@|\gBu@~_@dO_DwPdd@hi@gd@fRxRrLyLb]`o@zo@d@_T|ZnGhEr{@eAzb@sSpWp]uMziAx~A|n@y]xJgE~[g_AjpAyX`EaZs[gl@jU{VgKkPfy@t^ffAiaBtT{GbErNrEmd@ni@sOqMqBxQuS}F_GuOiFzh@sOjMtOfdA}g@`c@nE|UwLjV~J~o@u^{AeGo|@cd@`IcQ}h@zI{]iYkd@cp@fTiSg\eIww@vViUVgSgKaSi~@fZ{\_D}[nh@oo@}BxKtn@_Our@sd@x]t@wNy`AgFo^xLkSyV}NkaAi`@l@_jBnu@yu@`jByLg@_g@cmBkJrRaTmH}Hca@er@qCbLckAcIwt@g{@oe@mc@|IabAmc@iWe`@_EiQbL}RyRgCzHeEgWok@tCuc@rYxy@jm@pGn]sErYmi@xQrEbz@k{@}HtUpJvOhc@jLxe@ueAoKm_AdSbEt[w\p[c}A}FexBpWcDdNua@{ByaAdT{c@tc@jY`ZkG|B~\$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

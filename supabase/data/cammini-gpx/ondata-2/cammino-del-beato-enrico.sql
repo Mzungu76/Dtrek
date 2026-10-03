@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino del Beato Enrico da Bolzano$q$, 'cammino', 45.989802, 11.666375, $q$Italia$q$, 'gpx', 'cammino/cammino-del-beato-enrico', 0.75,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino del Beato Enrico da Bolzano$q$, 'cammino', 45.989802, 11.666375, $q$Italia$q$, $q$https://compagniasantiagobeatoenrico.it/$q$, 'gpx', 'cammino/cammino-del-beato-enrico', 0.75,
     $q${"kind":"cammino","theme":"religioso","lengthM":257427,"tappeCount":13,"tappeSource":"official","start":{"name":"Bolzano","lat":46.497695,"lon":11.353346},"end":{"name":null,"lat":45.539884,"lon":12.396979},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":13,"totalKm":260.1,"connected":true,"maxTappaKm":27.7,"namedShare":0.7692307692307693,"officialTappe":0,"computedTappe":13,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$sqxzGmmhdArRwAlDnk@rVbYjVxtA|mAjqBuz@vc@hG~d@l_@cLjBf|BxUbi@voAra@jb@aLr}@r}@zuAzBffAtr@bo@z~@vZ`Jz|@wZ`Xjd@nPzC`EsRrPhYrQiOtUzKp@g[lc@zNTuTf[yG`d@z[zZyd@fhCxWrb@oNtg@qvBp^tWje@smArr@r_@nZpu@aHhTdIxUpKgF`X|s@f[~QoAwS~t@pYp~B_LdM|T|SmM`kA~wAjWps@P|Ye]po@vn@jhC~u@vnAvPxpB|^nW`aAnJnc@lx@~{@vj@bZviAfdAtl@ldAgIlZbd@[}VjoAff@z_Amr@nFuaAt_Bxd@jLeVbLbLzSoVdl@xJr|AmdA|R|@~D{Wff@g_@pAsd@Ser@sQiMgKyj@hTccAsEa\gW}CeDk_@nZw~@iI}s@|l@oWXkOiVcIpNoCzAuUbd@yAhJusBr_Amn@pb@bYjTy_A`\c_@tqAH|Dul@lcBgwAbPseAtm@k`@rl@~w@sIaRkHccEcbAsvCfAu`C{w@ieCmfAgfAu{Ak|Faa@_lDnG{a@zPoH}DuQhSq|@eEo~@nWgwB}Kyc@xK}y@hh@gqCzpBeeEbF}x@uJsm@pP_q@~e@ma@lPaoCnV}Uvt@ecCziAob@zm@oq@nDqc@d`AufBjJwx@`f@wSaNfYtMiFvi@e_BhXwOt`DdNhw@bWni@b`@hh@fqCxf@dIliB~oA|}@p_Bvb@`NlrA{y@j_AuuCzpBeeCfsBtInt@q[h{@qpA|~@mF|RrO}MyxCaf@gq@yQqwAkx@w~BiMwuBbHw~Bwd@uK_[icBcDshAuTkKqFiZ|[ukAcQkgAl{Bm@~j@zTtEzV~rAfQn]x`@`f@PKjM~i@nNdx@mFj]vY|CoQt`Be`@jiAoAbj@in@`a@fHflAijDhZyOk@_b@nLqNe\kbIl}CsdA~@aUj_@`DaFmnAfNkjBcUqI`PmCjYou@AkY}VQyCqVbAu\lOmB~C}xD|r@qU}F}d@xl@yOcbEiuSeI_iC_Tmy@dOky@kSwG_Ryo@lNug@xByvA`b@{UaSwj@bhA_rBaXkYmFocAtZqq@sAum@zL}NkV{[rf@hFqJoqBp]_]`LvaAdjGmmCji@x[fPgQ`Jqx@fRrA~`@obAhv@}_@eE}y@dh@oqAtqCrmA$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

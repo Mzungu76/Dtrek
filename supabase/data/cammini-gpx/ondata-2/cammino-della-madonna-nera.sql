@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino della Madonna Nera$q$, 'cammino', 40.433599, 15.800637, $q$Basilicata$q$, 'gpx', 'cammino/cammino-della-madonna-nera', 0.9,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino della Madonna Nera$q$, 'cammino', 40.433599, 15.800637, $q$Basilicata$q$, $q$https://www.camminomadonnanera.it/$q$, 'gpx', 'cammino/cammino-della-madonna-nera', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":50546,"tappeCount":4,"tappeSource":"official","start":{"name":null,"lat":40.54391,"lon":15.638013},"end":{"name":null,"lat":40.339919,"lon":15.899452},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":4,"totalKm":51.6,"connected":true,"maxTappaKm":15.5,"namedShare":0,"officialTappe":4,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$mvmvFqhm~AlM{mAvo@q`@xMmk@hFrGdi@qr@zu@wPptBw_BrIqkBl_@gNjNu\oCiVfWma@oW_`AuClOfAeUxu@s`AjWyEzU{eCd`@i[tf@cCpa@}t@dh@}\p`Ccc@zDes@{n@eGqXvL_]}WzRhAdNgTs`@jYp[nPpXwLvl@zHlx@ccAx\jApg@{k@yAcQlR{RgLsFlp@uv@hFw_@ln@aTtjAegCI_Oua@tE|M}LuDgJm@r]|_@cGbBi|@tm@uHoAwWz\vK~b@e}@bZvDz\eiAvs@B$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)
