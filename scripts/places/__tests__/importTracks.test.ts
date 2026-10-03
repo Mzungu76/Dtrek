@@ -59,8 +59,13 @@ describe('catalogo ministero', () => {
     for (const [id, name] of Object.entries(MINISTERO_MAP)) {
       if (!name) continue
       expect(CATALOGO.some(c => c.name === name), `${id} → ${name}`).toBe(true)
-      expect(officialUrlFor(id), id).toMatch(/^https?:\/\//)
+      const u = officialUrlFor(id)
+      if (u) expect(u, id).toMatch(/^https?:\/\//)
     }
+  })
+  it('scarta i segnaposto che rimandano al catalogo del ministero', () => {
+    expect(officialUrlFor('cammino-dei-francescani-abruzzo')).toBeNull()
+    expect(officialUrlFor('percorso-santa-spina')).toBeNull()
   })
   it("corregge i link malformati del catalogo (Acqua, Sette Sorelle)", () => {
     expect(officialUrlFor('cammino-dellacqua')).toBe('https://www.camminodellacqua.org/')

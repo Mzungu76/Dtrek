@@ -60,5 +60,7 @@ export function officialUrlFor(id: string): string | null {
   const name = MINISTERO_MAP[id]
   if (!name) return null
   const entry = CATALOGO.find(c => c.name === name)
-  return entry ? normalizeSiteUrl(entry.sito) : null
+  const url = entry ? normalizeSiteUrl(entry.sito) : null
+  // Alcune schede hanno come «sito» un segnaposto che rimanda al catalogo stesso (`…/#`): non è un link di approfondimento.
+  return url && new URL(url).hostname.endsWith('ministeroturismo.gov.it') ? null : url
 }
