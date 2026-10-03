@@ -1,33 +1,4 @@
-// Cammini importati da tracce GPX/KML fornite dagli enti (non da OpenStreetMap): per ognuno, quali
-// file/tracce sono le tappe e come si chiamano i capi. I percorsi sono relativi alla cartella --src
-// (gli zip ricevuti, scompattati). Un cammino con `structure: 'rete'` raccoglie varianti o percorsi
-// alternativi: l'utente ne sceglie uno, non li cammina in sequenza.
-
-export interface TappaSpec {
-  /** File (GPX/KML) relativo alla cartella sorgente. */
-  file: string
-  /** Se il file contiene più tracce: espressione sul nome della traccia (decodificato). Senza: tutte, concatenate. */
-  track?: string
-  /** Nome mostrato; default `Tappa <ordinale>`. */
-  name?: string
-  from?: string
-  to?: string
-}
-
-export interface CamminoSpec {
-  /** Entra nel source_id (`cammino/<id>`): non rinominare dopo l'import. */
-  id: string
-  name: string
-  region: string
-  theme: 'religioso' | 'storico' | 'naturalistico'
-  structure: 'cammino' | 'rete'
-  tappe: TappaSpec[]
-  /** Se presente, forza "da rivedere" (le tracce non bastano a ricostruire una sequenza affidabile). */
-  reviewReason?: string
-  notes?: string
-  /** Ordinali dopo i quali un salto fra tappe è atteso (traghetto, trasferimento) e non va segnalato. */
-  allowGapsAfter?: number[]
-}
+import type { CamminoSpec, TappaSpec } from './types'
 
 const SANTUARI = '149dc53e-Cammino-dei-Santuari-del-Mare/'
 const PROTO = '5e4a5c3d-Cammino-dei-Protomartiri-Francescani/'
@@ -73,14 +44,13 @@ const calabro = (n: number, label = `CB-${pad(n)}`): TappaSpec => ({ file: BASIL
 const lucano = (n: number, label = `CBL-${pad(n)}`): TappaSpec => ({ file: BASILIANO, track: `^${pad(n)}_(?!.*Variante)`, name: label, from: CB_LUCANO[n][0], to: CB_LUCANO[n][1] })
 
 // Percorso principale del tratto calabro: dove ci sono alternative si è scelta quella numerata come
-// tappa (non WILD, non "opzione più difficile", non 29 bis); le altre vanno nel cammino delle varianti.
+// tappa (non WILD, non "opzione più difficile", non 29 bis); le altre non sono importate.
 const CALABRO_MAIN = [1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 25, 30, 31, 33, 34, 35, 36, 38, 39, 40, 41, 42, 48, 50, 53, 54, 55, 56, 57, 59, 60, 61, 62, 64, 65, 67, 69, 70, 71, 72]
-const CALABRO_VARIANTI = [3, 4, 15, 24, 26, 27, 28, 29, 32, 37, 43, 44, 45, 46, 47, 49, 51, 52, 58, 63, 66, 68]
 
 const grazie = (n: number, file: string, from: string, to: string): TappaSpec => ({ file: `${GRAZIE}${file}`, name: `Tappa ${pad(n)}`, from, to })
 const station = (file: string, from: string, to: string, name?: string): TappaSpec => ({ file, from, to, name })
 
-export const TRACK_CAMMINI: CamminoSpec[] = [
+export const ONDATA_1: CamminoSpec[] = [
   {
     id: 'cammino-santuari-del-mare', name: 'Cammino dei Santuari del Mare', region: 'Liguria', theme: 'religioso', structure: 'cammino',
     tappe: [
@@ -211,22 +181,12 @@ export const TRACK_CAMMINI: CamminoSpec[] = [
   },
   {
     id: 'cammino-basiliano-tratto-calabro', name: 'Cammino Basiliano — Tratto calabro', region: 'Calabria', theme: 'religioso', structure: 'cammino',
-    notes: 'Percorso principale Rocca Imperiale → Reggio Calabria (numerazione CB ufficiale). Alternative e tratti WILD nel cammino "Varianti".',
+    notes: 'Percorso principale Rocca Imperiale → Reggio Calabria (numerazione CB ufficiale). Le alternative (WILD, 29 bis, via Caccuri) non sono importate.',
     tappe: CALABRO_MAIN.map(n => calabro(n)),
   },
   {
     id: 'cammino-basiliano-tratto-lucano', name: 'Cammino Basiliano — Tratto lucano', region: 'Basilicata', theme: 'religioso', structure: 'cammino',
     notes: 'Lauria → Alessandria del Carretto (si innesta nel tratto calabro).',
     tappe: [1, 2, 3, 4, 5, 6].map(n => lucano(n)),
-  },
-  {
-    id: 'cammino-basiliano-varianti', name: 'Cammino Basiliano — Varianti e tratti WILD', region: 'Calabria', theme: 'religioso', structure: 'rete',
-    notes: 'Opzioni alternative, tratti WILD, variante via Caccuri e Santa Severina (CB-27/28/29), percorso "29 bis" ionico e collegamenti del Pollino.',
-    tappe: [
-      ...CALABRO_VARIANTI.map(n => calabro(n, `CB-${pad(n)}${[24, 26, 32, 49, 63, 66, 68].includes(n) ? ' WILD' : ''}`)),
-      { file: BASILIANO, track: '^02_.*Variante', name: 'CBL-02 Variante San Nilo', from: 'Castelluccio Superiore', to: 'Rotonda' },
-      { file: BASILIANO, track: '^07_', name: 'CBL-07 Collegamento San Lorenzo Bellizzi', from: 'San Lorenzo Bellizzi', to: 'Terranova del Pollino' },
-      { file: BASILIANO, track: '^WILD_MADONNA', name: 'CBL WILD Madonna del Pollino → Civita', from: 'Madonna del Pollino', to: 'Civita' },
-    ],
   },
 ]

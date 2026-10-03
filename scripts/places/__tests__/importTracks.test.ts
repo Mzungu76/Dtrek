@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { orientSequence, resolveTappaLine } from '../cammini/import-tracks'
-import { TRACK_CAMMINI } from '../cammini/tracks-manifest'
+import { WAVES } from '../cammini/tracks'
 import type { LatLon } from '../../../lib/cammini/geometry'
 
 describe('import-tracks', () => {
@@ -23,9 +23,9 @@ describe('import-tracks', () => {
     expect(() => resolveTappaLine(tracks, { file: 'f', track: 'zzz' })).toThrow(/Nessuna traccia/)
   })
   it('manifest: id unici e senza tappe duplicate nei percorsi principali', () => {
-    const ids = TRACK_CAMMINI.map(c => c.id)
+    const ids = Object.values(WAVES).flat().map(c => c.id)
     expect(new Set(ids).size).toBe(ids.length)
-    for (const c of TRACK_CAMMINI) {
+    for (const c of Object.values(WAVES).flat()) {
       if (c.structure !== 'cammino') continue
       const keys = c.tappe.map(t => `${t.file}|${t.track ?? ''}`)
       if (c.id.includes('florensi')) continue

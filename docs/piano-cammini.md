@@ -224,9 +224,11 @@ Scelta dopo i mockup (concept B), con queste regole:
 
 ## Import da tracce GPX/KML degli enti
 
-Per i cammini di cui l'ente fornisce le tracce (non presenti o incomplete su OSM) c'è una pipeline separata da quella OSM:
+Per i cammini di cui l'ente fornisce le tracce c'è una pipeline separata da quella OSM, organizzata per **ondate**: ogni lotto di zip ricevuto è un'ondata con la sua cartella.
 
-- `scripts/places/cammini/tracks-manifest.ts`: per ogni cammino, quali file/tracce sono le tappe, nomi dei capi, `structure` (`cammino` = sequenza, `rete` = varianti/percorsi alternativi). Origine `source = 'gpx'`, `source_id = cammino/<id>`.
-- `scripts/places/cammini/import-tracks.ts --src <zip scompattati> [--only <id>] --sql supabase/data/cammini-gpx`: legge GPX/KML, orienta le tappe lungo la sequenza (alcune tracce sono registrate al contrario), controlla la continuità (tappe a più di 2 km → «da rivedere»), semplifica a 15 m e scrive uno `.sql` per cammino.
-- `supabase/data/cammini-gpx/*.sql`: idempotenti e autosufficienti (decodifica delle polilinee con una funzione temporanea). Eseguirli, poi `zz-anchors.sql` (aggancia i capi tappa ai borghi entro 1,5 km, riempie i nomi mancanti, crea le relazioni `near`). Quote e POI/servizi si calcolano al primo bisogno, come per i cammini OSM.
-- Le tappe «da rivedere» (es. Cammino dei Francescani, 11 tratti senza ordine) non compaiono nella ricerca finché `metadata.quality.status` non viene portato a `pronto`.
+- `scripts/places/cammini/tracks/ondata-N.ts`: per ogni cammino, quali file/tracce sono le tappe, nomi dei capi, `structure` (`cammino` = sequenza, `rete` = varianti/percorsi alternativi), `computeTappe` per le tracce uniche. Origine `source = 'gpx'`, `source_id = cammino/<id>`. Le ondate sono registrate in `tracks/index.ts`.
+- `npx tsx scripts/places/cammini/import-tracks.ts --wave N --src <zip scompattati> [--only <id>] --sql supabase/data/cammini-gpx/ondata-N`: legge GPX/KML/KMZ (`unzip` per i KMZ), orienta le tappe lungo la sequenza (alcune tracce sono registrate al contrario), controlla la continuità (salti > 2 km → «da rivedere»), semplifica a 15 m e scrive uno `.sql` per cammino.
+- Tracce uniche senza tappe (`computeTappe`): le tappe si calcolano tagliando la linea sui borghi del catalogo. Le ancore si leggono da `ondata-N/anchors/<id>.json`; per produrle: `--anchors-sql` stampa la query (sola lettura) da eseguire sul database, il risultato va salvato nel JSON.
+- `supabase/data/cammini-gpx/ondata-N/*.sql`: idempotenti e autosufficienti (decodifica delle polilinee con una funzione temporanea). Eseguirli, poi `zz-anchors.sql` (aggancia i capi tappa ai borghi entro 1,5 km, riempie i nomi mancanti, crea le relazioni `near`). Quote e POI/servizi si calcolano al primo bisogno.
+- Per **eliminare** un cammino importato: `delete from dtrek_places where source = 'gpx' and source_id = 'cammino/<id>';` (tappe, relazioni e fonti partono a cascata). Toglierlo anche dal manifest e dalla cartella SQL, altrimenti un nuovo import lo rimette.
+- I cammini «da rivedere» non compaiono nella ricerca finché `metadata.quality.status` non è `pronto`.

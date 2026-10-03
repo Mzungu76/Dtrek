@@ -1,5 +1,5 @@
 
-with c as (select id from dtrek_places where source = 'gpx' and source_id in ('cammino/cammino-santuari-del-mare','cammino/cammino-protomartiri-francescani','cammino/cammino-dei-picentini','cammino/cammino-dei-francescani-abruzzo','cammino/cammino-dei-florensi','cammino/cammino-dei-florensi-variante-prato-piano','cammino/cammino-dei-cappuccini','cammino/cammino-delle-sette-sorelle','cammino/cammini-madonna-del-monticino','cammino/anello-cimino-santi-patroni','cammino/alta-via-delle-grazie','cammino/alta-via-delle-grazie-varianti','cammino/cammino-basiliano-tratto-calabro','cammino/cammino-basiliano-tratto-lucano','cammino/cammino-basiliano-varianti')),
+with c as (select id from dtrek_places where source = 'gpx' and source_id in ('cammino/cammino-santuari-del-mare','cammino/cammino-protomartiri-francescani','cammino/cammino-dei-picentini','cammino/cammino-dei-francescani-abruzzo','cammino/cammino-dei-florensi','cammino/cammino-dei-florensi-variante-prato-piano','cammino/cammino-dei-cappuccini','cammino/cammino-delle-sette-sorelle','cammino/cammini-madonna-del-monticino','cammino/anello-cimino-santi-patroni','cammino/alta-via-delle-grazie','cammino/alta-via-delle-grazie-varianti','cammino/cammino-basiliano-tratto-calabro','cammino/cammino-basiliano-tratto-lucano')),
 ends as (
   select t.id tid, t.polyline->0 p0, t.polyline->-1 p1, t.from_name, t.to_name
   from dtrek_cammino_tappe t join c on c.id = t.cammino_id
@@ -24,7 +24,7 @@ from pick p where p.tid = x.id;
 insert into dtrek_place_relations (from_place_id, to_place_id, relation_type, metadata)
 select t.cammino_id, a.pid, 'near', jsonb_build_object('tappe', jsonb_agg(distinct a.ord order by a.ord))
 from dtrek_cammino_tappe t
-join dtrek_places c on c.id = t.cammino_id and c.source = 'gpx' and c.source_id in ('cammino/cammino-santuari-del-mare','cammino/cammino-protomartiri-francescani','cammino/cammino-dei-picentini','cammino/cammino-dei-francescani-abruzzo','cammino/cammino-dei-florensi','cammino/cammino-dei-florensi-variante-prato-piano','cammino/cammino-dei-cappuccini','cammino/cammino-delle-sette-sorelle','cammino/cammini-madonna-del-monticino','cammino/anello-cimino-santi-patroni','cammino/alta-via-delle-grazie','cammino/alta-via-delle-grazie-varianti','cammino/cammino-basiliano-tratto-calabro','cammino/cammino-basiliano-tratto-lucano','cammino/cammino-basiliano-varianti')
+join dtrek_places c on c.id = t.cammino_id and c.source = 'gpx' and c.source_id in ('cammino/cammino-santuari-del-mare','cammino/cammino-protomartiri-francescani','cammino/cammino-dei-picentini','cammino/cammino-dei-francescani-abruzzo','cammino/cammino-dei-florensi','cammino/cammino-dei-florensi-variante-prato-piano','cammino/cammino-dei-cappuccini','cammino/cammino-delle-sette-sorelle','cammino/cammini-madonna-del-monticino','cammino/anello-cimino-santi-patroni','cammino/alta-via-delle-grazie','cammino/alta-via-delle-grazie-varianti','cammino/cammino-basiliano-tratto-calabro','cammino/cammino-basiliano-tratto-lucano')
 cross join lateral (values (t.from_place_id, t.ordinal), (t.to_place_id, t.ordinal)) a(pid, ord)
 where a.pid is not null
 group by t.cammino_id, a.pid
