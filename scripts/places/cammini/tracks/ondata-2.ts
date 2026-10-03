@@ -2,7 +2,7 @@ import type { CamminoSpec, TappaSpec } from './types'
 
 // Ondata 2 — tracce ricevute il 2026-10-03 (9 zip). Dove una traccia è unica e senza tappe (Perdono, Santo Marino,
 // Beato Enrico, Cammino dell'Acqua) le tappe sono calcolate sui borghi del catalogo (computeTappe).
-// Le varianti brevi non sono importate: Acqua (Sant'Angelo in Grotte, Sepino), Pace (09b, 10b, 11b, 25, 26b),
+// Le varianti stanno in cammini a parte (structure 'rete'): Acqua (Sant'Angelo in Grotte, Sepino), Pace (09b, 10b, 11b, 25, 26b),
 // Magna Grecia (2_eremo_santa_severina_VS).
 
 const SPINA = '05ba8c1f-Prot_Par-0008233-del-17-06-2024-Allegato-File-KMZ-e-GPX-Percorso-Santa-Spina/'
@@ -34,13 +34,13 @@ const PACE_TAPPE: [string, string, string][] = [
 export const ONDATA_2: CamminoSpec[] = [
   {
     id: 'cammino-della-pace', name: 'Cammino della Pace', region: 'Italia', theme: 'religioso', structure: 'cammino',
-    notes: "L'Aquila → Monte Sant'Angelo (Abruzzo, Molise, Puglia). Alternative non importate: 09b/10b/11b (via Santo Spirito e Rifugio di Marco) e 25 + 26b (via San Severo).",
+    notes: "L'Aquila → Monte Sant'Angelo (Abruzzo, Molise, Puglia). Alternative nel cammino Varianti: 09b/10b/11b (via Santo Spirito e Rifugio di Marco) e 25 + 26b (via San Severo).",
     tappe: PACE_TAPPE.map(([n, from, to], i) => t(`${PACE}${n}.gpx`, from, to, `Tappa ${String(i + 1).padStart(2, '0')}`)),
   },
   {
     id: 'cammino-della-magna-grecia', name: 'Cammino della Magna Grecia', region: 'Calabria', theme: 'storico', structure: 'cammino',
     allowGapsAfter: [1, 7],
-    notes: 'Anello Crotone → Crotone. Le tracce hanno due salti (3,1 km fra Eremo e Rocca di Neto, 4,6 km fra Casabona e Zinga): collegamenti non tracciati nei file. Il nome del file 10a dice Roccabernarda ma la traccia arriva a Petilia Policastro (segue la 11): capi dati dalla geometria. Variante 2_eremo_santa_severina_VS non importata.',
+    notes: 'Anello Crotone → Crotone. Le tracce hanno due salti (3,1 km fra Eremo e Rocca di Neto, 4,6 km fra Casabona e Zinga): collegamenti non tracciati nei file. Il nome del file 10a dice Roccabernarda ma la traccia arriva a Petilia Policastro (segue la 11): capi dati dalla geometria. Variante 2_eremo_santa_severina_VS nel cammino Varianti.',
     tappe: [
       t(`${MG}1.Crotone-Eremo_Via_Sacra.kmz`, 'Crotone', 'Eremo della Via Sacra'),
       t(`${MG}2.Rocca di Neto - Strongoli.kmz`, 'Rocca di Neto', 'Strongoli'),
@@ -102,7 +102,7 @@ export const ONDATA_2: CamminoSpec[] = [
   },
   {
     id: 'cammino-dellacqua', name: "Cammino dell'Acqua", region: 'Molise', theme: 'naturalistico', structure: 'cammino', computeTappe: true,
-    notes: "Castelpetroso → Cercemaggiore. Tappe calcolate. Varianti Sant'Angelo in Grotte e Sepino non importate.",
+    notes: "Castelpetroso → Cercemaggiore. Tappe calcolate. Varianti Sant'Angelo in Grotte e Sepino nel cammino Varianti.",
     tappe: [t(`${ACQUA}Cammino dell_Acqua.gpx`, 'Castelpetroso', 'Cercemaggiore')],
   },
   {
@@ -119,5 +119,27 @@ export const ONDATA_2: CamminoSpec[] = [
     id: 'cammino-del-beato-enrico', name: 'Cammino del Beato Enrico da Bolzano', region: 'Italia', theme: 'religioso', structure: 'cammino', computeTappe: true,
     notes: 'Bolzano → Veneto (260 km). Tappe calcolate (la traccia è unica).',
     tappe: [t(`${BEATO}Cammino Beato Enrico da Bolzano - traccia-ufficiale-update-jan-20 (1).gpx`, 'Bolzano')],
+  },
+  {
+    id: 'cammino-della-pace-varianti', name: 'Cammino della Pace — Varianti', region: 'Italia', theme: 'religioso', structure: 'rete',
+    notes: 'Via Santo Spirito e Rifugio di Marco (09b, 10b, 11b) e via San Severo (25 + 26b).',
+    tappe: [
+      t(`${PACE}09b.gpx`, 'Caramanico Terme', 'Santo Spirito', 'Variante 09b'),
+      t(`${PACE}10b.gpx`, 'Santo Spirito', 'Rifugio di Marco', 'Variante 10b'),
+      t(`${PACE}11b.gpx`, 'Rifugio di Marco', 'Guardiagrele', 'Variante 11b'),
+      t(`${PACE}25.gpx`, 'San Paolo di Civitate', 'San Severo', 'Variante 25'),
+      t(`${PACE}26b.gpx`, 'San Severo', 'Santa Maria di Stignano', 'Variante 26b'),
+    ],
+  },
+  {
+    id: 'cammino-della-magna-grecia-varianti', name: 'Cammino della Magna Grecia — Varianti', region: 'Calabria', theme: 'storico', structure: 'rete',
+    tappe: [t(`${MG}2_eremo_santa_severina_VS.kmz`, 'Eremo della Via Sacra', 'Santa Severina', 'Variante Via Sacra: Eremo → Santa Severina')],
+  },
+  {
+    id: 'cammino-dellacqua-varianti', name: "Cammino dell'Acqua — Varianti", region: 'Molise', theme: 'naturalistico', structure: 'rete',
+    tappe: [
+      t(`${ACQUA}Cammino Acqua_Variante Sant'Angelo in Grotte.gpx`, 'Castelpetroso', "Sant'Angelo in Grotte", "Variante Sant'Angelo in Grotte"),
+      t(`${ACQUA}Cammino Acqua_Variante Sepino.gpx`, undefined, undefined, 'Variante Sepino'),
+    ],
   },
 ]

@@ -1,5 +1,5 @@
 
-with c as (select id from dtrek_places where source = 'gpx' and source_id in ('cammino/cammino-della-pace','cammino/cammino-della-magna-grecia','cammino/via-dellasceta','cammino/percorso-santa-spina','cammino/cammino-della-madonna-nera','cammino/cammino-del-salento-via-dei-borghi','cammino/cammino-del-salento-via-del-mare','cammino/cammino-dellacqua','cammino/cammino-del-perdono','cammino/cammino-del-santo-marino','cammino/cammino-del-beato-enrico')),
+with c as (select id from dtrek_places where source = 'gpx' and source_id in ('cammino/cammino-della-pace','cammino/cammino-della-magna-grecia','cammino/via-dellasceta','cammino/percorso-santa-spina','cammino/cammino-della-madonna-nera','cammino/cammino-del-salento-via-dei-borghi','cammino/cammino-del-salento-via-del-mare','cammino/cammino-dellacqua','cammino/cammino-del-perdono','cammino/cammino-del-santo-marino','cammino/cammino-del-beato-enrico','cammino/cammino-della-pace-varianti','cammino/cammino-della-magna-grecia-varianti','cammino/cammino-dellacqua-varianti')),
 ends as (
   select t.id tid, t.polyline->0 p0, t.polyline->-1 p1, t.from_name, t.to_name
   from dtrek_cammino_tappe t join c on c.id = t.cammino_id
@@ -24,7 +24,7 @@ from pick p where p.tid = x.id;
 insert into dtrek_place_relations (from_place_id, to_place_id, relation_type, metadata)
 select t.cammino_id, a.pid, 'near', jsonb_build_object('tappe', jsonb_agg(distinct a.ord order by a.ord))
 from dtrek_cammino_tappe t
-join dtrek_places c on c.id = t.cammino_id and c.source = 'gpx' and c.source_id in ('cammino/cammino-della-pace','cammino/cammino-della-magna-grecia','cammino/via-dellasceta','cammino/percorso-santa-spina','cammino/cammino-della-madonna-nera','cammino/cammino-del-salento-via-dei-borghi','cammino/cammino-del-salento-via-del-mare','cammino/cammino-dellacqua','cammino/cammino-del-perdono','cammino/cammino-del-santo-marino','cammino/cammino-del-beato-enrico')
+join dtrek_places c on c.id = t.cammino_id and c.source = 'gpx' and c.source_id in ('cammino/cammino-della-pace','cammino/cammino-della-magna-grecia','cammino/via-dellasceta','cammino/percorso-santa-spina','cammino/cammino-della-madonna-nera','cammino/cammino-del-salento-via-dei-borghi','cammino/cammino-del-salento-via-del-mare','cammino/cammino-dellacqua','cammino/cammino-del-perdono','cammino/cammino-del-santo-marino','cammino/cammino-del-beato-enrico','cammino/cammino-della-pace-varianti','cammino/cammino-della-magna-grecia-varianti','cammino/cammino-dellacqua-varianti')
 cross join lateral (values (t.from_place_id, t.ordinal), (t.to_place_id, t.ordinal)) a(pid, ord)
 where a.pid is not null
 group by t.cammino_id, a.pid
