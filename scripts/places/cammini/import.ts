@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { camminoToPlaceCandidate, type BuiltCammino } from './build'
+import type { GpxVariant } from '../../../lib/cammini/gpxTappe'
 
 // Scrittura di un Cammino in dtrek_places + dtrek_cammino_tappe + dtrek_place_relations.
 // Non passa da scripts/places/import.ts: la deduplicazione per prossimità/nome pensata per punti
@@ -83,4 +84,23 @@ export async function importCammino(supabase: SupabaseClient, built: BuiltCammin
   }
 
   return { placeId, tappeWritten: rows.length, tappeRemoved: removed?.length ?? 0, relationsWritten: relations.length }
+}
+
+/** Scrittura dei tracciati GPX "variante" (dtrek_cammino_tappe_varianti) accanto a un cammino già
+ *  importato con importCammino — solo per i cammini da GPX (buildFromGpxFiles), non da Overpass.
+ *  `source_filename` identifica la variante tra un import e l'altro: niente coda da pulire come per
+ *  le tappe, un re-import con meno varianti lascia solo righe di file non più presenti nella fonte. */
+export async function importCamminoVarianti(supabase: SupabaseClient, placeId: string, variants: GpxVariant[]): Promise<number> {
+  if (variants.length === 0) return 0
+  const rows = variants.map(v => ({
+    cammino_id:      placeId,
+    tappa_ordinal:   v.tappaOrdinal,
+    name:            v.name,
+    source_filename: v.filename,
+    length_m:        Math.round(v.lengthM),
+    polyline:        v.polyline,
+  }))
+  const { error } = await supabase.from('dtrek_cammino_tappe_varianti').upsert(rows, { onConflict: 'cammino_id,source_filename' })
+  if (error) throw error
+  return rows.length
 }
