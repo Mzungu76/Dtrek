@@ -8,6 +8,7 @@ import { encodePolyline } from '../../../lib/cammini/polylineCodec'
 import { splitIntoTappe, type TappaAnchor } from '../../../lib/cammini/tappe'
 import { chainSegments, decodeXmlText, parseTrackFile, type ParsedTrack } from '../../../lib/cammini/trackParse'
 import { WAVES } from './tracks'
+import { officialUrlFor } from './tracks/ministero'
 import type { CamminoSpec, TappaSpec } from './tracks/types'
 
 // Importa cammini da file GPX/KML (tracce ufficiali degli enti) in dtrek_places + dtrek_cammino_tappe.
@@ -191,11 +192,11 @@ export function camminoSql(b: BuiltTrackCammino): string {
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values (${sqlStr(spec.name)}, 'cammino', ${lat}, ${lon}, ${sqlStr(spec.region)}, '${SOURCE}', '${sid}', ${b.tappeSource === 'official' ? 0.9 : b.tappeSource === 'mixed' ? 0.8 : 0.75},
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values (${sqlStr(spec.name)}, 'cammino', ${lat}, ${lon}, ${sqlStr(spec.region)}, ${sqlStr(officialUrlFor(spec.id))}, '${SOURCE}', '${sid}', ${b.tappeSource === 'official' ? 0.9 : b.tappeSource === 'mixed' ? 0.8 : 0.75},
     ${sqlStr(JSON.stringify(meta))}::jsonb || jsonb_build_object('overviewPolyline', ${poly(simplifyPolyline(b.line, OVERVIEW_TOLERANCE_M))}))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)
@@ -275,7 +276,20 @@ function arg(name: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined
 }
 
+/** SQL che compila solo official_url dei cammini già importati (tutte le ondate), senza toccare altro. */
+export function officialUrlsSql(): string {
+  const rows = Object.values(WAVES).flat().map(s => ({ id: s.id, url: officialUrlFor(s.id) })).filter((r): r is { id: string; url: string } => !!r.url)
+  return `-- Link di approfondimento dal catalogo del Ministero del Turismo (vedi tracks/ministero.ts). Idempotente; non tocca altri campi.
+update dtrek_places p set official_url = v.url
+from (values
+  ${rows.map(r => `('cammino/${r.id}', ${sqlStr(r.url)})`).join(',\n  ')}
+) v(source_id, url)
+where p.source = '${SOURCE}' and p.source_id = v.source_id;`
+}
+
 function main() {
+  const urlsOut = arg('urls-sql')
+  if (urlsOut) { fs.mkdirSync(path.dirname(urlsOut), { recursive: true }); fs.writeFileSync(urlsOut, officialUrlsSql()); console.log(`Scritto ${urlsOut}`); return }
   const src = arg('src'), wave = Number(arg('wave'))
   const specs0 = WAVES[wave]
   if (!src || !specs0) { console.error(`Servono --src <cartella con gli zip scompattati> e --wave <${Object.keys(WAVES).join('|')}>`); process.exit(1) }

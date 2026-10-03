@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino di San Bartolomeo$q$, 'cammino', 44.0059548988938, 10.8100935816765, $q$Toscana$q$, 'gpx', 'cammino/cammino-di-san-bartolomeo', 0.75,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino di San Bartolomeo$q$, 'cammino', 44.0059548988938, 10.8100935816765, $q$Toscana$q$, $q$https://camminodisanbartolomeo.com/$q$, 'gpx', 'cammino/cammino-di-san-bartolomeo', 0.75,
     $q${"kind":"cammino","theme":"religioso","lengthM":82515,"tappeCount":5,"tappeSource":"official","start":{"name":"Fiumalbo","lat":44.179936889559,"lon":10.647810632363},"end":{"name":null,"lat":43.9342329651117,"lon":10.9200420230627},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":5,"totalKm":85.3,"connected":true,"maxTappaKm":20,"namedShare":0.2,"officialTappe":0,"computedTappe":5,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$s{slGys~_Afk@aF~O__@x[rMnt@wr@~^pC_HcMlPcSnXq@qt@_}@hMqa@oHku@`\oW|d@zNpg@wu@lC_`@nLvD`Qmo@`DpHsJcXp_@gwB|fBakA`Y}b@\{WzR|Jzi@ss@|TdDrc@si@sQtm@xqA{NbIdj@cHnPvMvWz]yZvb@wCfOlNdw@aQYmShgAvs@ld@eHjL}u@jZmTkJwk@ej@hEhUaI|Mig@fd@oFfLay@x|@qiBha@pBvYcvBgJuItWub@sAwRw]gGfAkbAuTwq@nUaBe~@s~@uAe]s_@rEep@ggA_StU}^gt@}BpQ_BkO|n@mXwf@wsA{L_aBsNiRfTkr@rWhSx]oZyBej@rNeMq_@IwZeq@lZ`j@jh@HgBiSxi@eiApLau@oB_x@lLeWwGko@p`@lMs@pZpS~Sjp@Jbi@va@jgAxaB|PtArIzc@j\r@dXen@pc@xM`w@zm@jBjxAvl@cEf@te@he@mH~g@li@$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

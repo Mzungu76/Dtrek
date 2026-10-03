@@ -1,0 +1,254 @@
+[
+ {
+  "name": "Alta Via delle Grazie",
+  "km": "271 km",
+  "regione": "Lombardia",
+  "sito": "https://www.altaviadellegrazie.com/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Alta-Via-delle-Grazie.zip"
+ },
+ {
+  "name": "Anello Cimino. Il cammino dei Santi Patroni",
+  "km": "58 km",
+  "regione": "Lazio",
+  "sito": "https://www.anellocimino.itolomeo.com/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Anello-Cimino-Cammino-dei-Santi-Patroni-UFFICIALE.zip"
+ },
+ {
+  "name": "Cammini della Madonna del Monticino e Percorsi Medievali",
+  "km": "84 km",
+  "regione": "Emilia-Romagna",
+  "sito": "http://www.parrocchiabrisighella.it/cammini-della-madonna-del-monticino-e-percorsi-medievali/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/12/24_160368-Cammini-della-Madonna-del-Monticino-e-Percorsi-Medievali.zip"
+ },
+ {
+  "name": "Cammino Basiliano",
+  "km": null,
+  "regione": null,
+  "sito": "https://www.camminobasiliano.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/09/CamminoBasiliano-tracciati-GPS.zip"
+ },
+ {
+  "name": "Cammino degli Eremi",
+  "km": "31 km",
+  "regione": "Molise",
+  "sito": "https://camminodeglieremi.altervista.org/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2026/08/26_102458-Georeferenziazione-Cammino-delle-Sette-Sorelle.zip"
+ },
+ {
+  "name": "Cammino dei cappuccini",
+  "km": "400 km",
+  "regione": "Marche",
+  "sito": "https://www.camminodeicappuccini.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-dei-Cappuccini.zip"
+ },
+ {
+  "name": "Cammino dei Florensi",
+  "km": "100 km",
+  "regione": "Calabria",
+  "sito": "https://www.moccivo.it/il-cammino-dei-florensi/il-cammino",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/08/Cammino-dei-Florensi.zip"
+ },
+ {
+  "name": "Cammino dei Francescani",
+  "km": "80 km",
+  "regione": "Abruzzo",
+  "sito": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/#",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2026/08/26_118070-Georeferenziazione-Cammino-dei-Francescani.zip"
+ },
+ {
+  "name": "Cammino dei Frati Santi",
+  "km": "15 km",
+  "regione": "Calabria",
+  "sito": "https://https//www.ilcamminodeifratisanti.it",
+  "zip": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/#"
+ },
+ {
+  "name": "Cammino dei Picentini",
+  "km": "104 km",
+  "regione": "Campania",
+  "sito": "https://ilcamminodeipicentini.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/05/Cammino-dei-Picentini.zip"
+ },
+ {
+  "name": "Cammino dei Protomartiri Francescani",
+  "km": "110 km",
+  "regione": "Umbria",
+  "sito": "https://www.camminoprotomartiri.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-dei-Protomartiri-Francescani.zip"
+ },
+ {
+  "name": "Cammino dei Santuari del Mare",
+  "km": "126 km",
+  "regione": "Liguria",
+  "sito": "https://camminodeisantuaridelmare.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/05/Cammino-dei-Santuari-del-Mare.zip"
+ },
+ {
+  "name": "Cammino del Beato Enrico da Bolzano",
+  "km": "250 km",
+  "regione": "Veneto, Trentino-Alto Adige",
+  "sito": "https://compagniasantiagobeatoenrico.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-Beato-Enrico-da-Bolzano-traccia-ufficiale-update-jan-20-1.zip"
+ },
+ {
+  "name": "Cammino del Perdono – Sui passi di Celestino",
+  "km": "215 km",
+  "regione": "Abruzzo, Molise",
+  "sito": "https://camminodelperdono.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-del-Perdono-Sui-passi-di-Celestino.zip"
+ },
+ {
+  "name": "Cammino del Salento",
+  "km": "182 km",
+  "regione": "Puglia",
+  "sito": "https://www.camminodelsalento.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-del-Salento.zip"
+ },
+ {
+  "name": "Cammino del Santo Marino",
+  "km": "79 km",
+  "regione": "Emilia-Romagna",
+  "sito": "https://www.sanmarinoexperience.com/il-cammino-del-santo-marino/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/06/Cammino-del-Santo-Marino-Full.zip"
+ },
+ {
+  "name": "Cammino dell’Acqua",
+  "km": "62 km",
+  "regione": "Molise",
+  "sito": "https://https//www.camminodellacqua.org",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/01/Tracce_Cammino_dellAcqua1.zip"
+ },
+ {
+  "name": "Cammino dell’Angelo di Monte Faito",
+  "km": "206 km",
+  "regione": "Campania",
+  "sito": "https://www.ilcamminodellangelo.it/",
+  "zip": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/page/2/#"
+ },
+ {
+  "name": "Cammino dell’Arcangelo Michele in San Felice a Cancello",
+  "km": "10 km",
+  "regione": "Campania",
+  "sito": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/page/2/#",
+  "zip": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/page/2/#"
+ },
+ {
+  "name": "Cammino dell’Incoronata",
+  "km": "200 km",
+  "regione": "Molise, Puglia",
+  "sito": "https://camminoincoronata.wixsite.com/my-site-1/",
+  "zip": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/page/2/#"
+ },
+ {
+  "name": "Cammino della Madonna Nera",
+  "km": "52 km",
+  "regione": "Basilicata",
+  "sito": "https://www.camminomadonnanera.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-della-Madonna-Nera.zip"
+ },
+ {
+  "name": "Cammino della Magna Grecia con la Via Sacra e la Via dell’Asceta",
+  "km": "400 km",
+  "regione": "Calabria",
+  "sito": "https://camminomagnagrecia.altervista.org/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/05/Cammino-della-Magna-Grecia-con-Via-dellAsceta-1.zip"
+ },
+ {
+  "name": "Cammino della Pace",
+  "km": "520 km",
+  "regione": "Abruzzo, Molise, Puglia",
+  "sito": "https://ilcamminodellapace.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-della-Pace.zip"
+ },
+ {
+  "name": "Cammino della Santa Spina",
+  "km": "5 km",
+  "regione": "Calabria",
+  "sito": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/page/2/#",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/06/Prot_Par-0008233-del-17-06-2024-Allegato-File-KMZ-e-GPX-Percorso-Santa-Spina.zip"
+ },
+ {
+  "name": "Cammino della Vita",
+  "km": "20 km",
+  "regione": "Veneto",
+  "sito": "https://www.ilcamminodellavita.it/",
+  "zip": "https://www.ministeroturismo.gov.it/catalogo-dei-cammini-religiosi-italiani/page/3/#"
+ },
+ {
+  "name": "Cammino delle 44 Chiesette Votive nelle Valli del Natisone",
+  "km": null,
+  "regione": null,
+  "sito": "http://www.chiesettevotive.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/12/24_241265-Cammino-delle-44-Chiesette-Votive-nelle-Valli-del-Natisone.zip"
+ },
+ {
+  "name": "Cammino delle Chiese campestri",
+  "km": "90 km",
+  "regione": "Molise",
+  "sito": "http://www.ilcamminocampestre.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/11/24_31252-Cammino-delle-Chiese-Campestri-1.zip"
+ },
+ {
+  "name": "Cammino delle Sette Sorelle",
+  "km": "128 km",
+  "regione": "Abruzzo",
+  "sito": "http://www.camminodellesettesorelle.it%20/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2026/08/26_102458-Georeferenziazione-Cammino-delle-Sette-Sorelle.zip"
+ },
+ {
+  "name": "Cammino di Assisi",
+  "km": "320 km",
+  "regione": "Emilia-Romagna, Toscana, Umbria",
+  "sito": "https://www.camminodiassisi.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/01/Cammino_di_Assisi1.zip"
+ },
+ {
+  "name": "Cammino di Don Tonino",
+  "km": "409 km",
+  "regione": "Puglia",
+  "sito": "https://www.camminodidontonino.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-di-Don-Tonino.zip"
+ },
+ {
+  "name": "Cammino di Francesco nel Lazio",
+  "km": "288 km",
+  "regione": "Lazio",
+  "sito": "https://www.camminodifrancesco.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Via-di-Francesco-nel-Lazio.zip"
+ },
+ {
+  "name": "Cammino di Hasekura e dei martiri giapponesi",
+  "km": "107 km",
+  "regione": "Lazio",
+  "sito": "https://www.camminodihasekura.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-di-Hasekura-e-dei-martiri-giapponesi.zip"
+ },
+ {
+  "name": "Cammino di Oropa",
+  "km": "221 km",
+  "regione": "Piemonte, Valle d'Aosta",
+  "sito": "https://www.camminodioropa.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-di-Oropa.zip"
+ },
+ {
+  "name": "Cammino di Padre Giovanni",
+  "km": "165 km",
+  "regione": "Toscana",
+  "sito": "http://www.camminopadregiovanni.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2024/05/Cammino-di-San-Michele.zip"
+ },
+ {
+  "name": "Cammino di San Bartolomeo",
+  "km": "100 km",
+  "regione": "Emilia-Romagna, Toscana",
+  "sito": "https://camminodisanbartolomeo.com/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-di-San-Bartolomeo.zip"
+ },
+ {
+  "name": "Cammino di San Benedetto",
+  "km": "300 km",
+  "regione": "Lazio, Umbria",
+  "sito": "http://www.camminodibenedetto.it/",
+  "zip": "https://www.ministeroturismo.gov.it/wp-content/uploads/2023/06/Cammino-di-San-Benedetto.zip"
+ }
+]

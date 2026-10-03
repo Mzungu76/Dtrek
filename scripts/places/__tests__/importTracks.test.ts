@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { orientSequence, overviewParts, resolveTappaLine } from '../cammini/import-tracks'
 import { WAVES } from '../cammini/tracks'
+import { CATALOGO, MINISTERO_MAP, officialUrlFor } from '../cammini/tracks/ministero'
 import type { LatLon } from '../../../lib/cammini/geometry'
 
 describe('import-tracks', () => {
@@ -45,5 +46,29 @@ describe('overviewParts', () => {
   it('in una rete ogni variante scollegata (oltre 300 m) è un pezzo a sé', () => {
     const parts = overviewParts({ spec: { structure: 'rete' } as never, tappe: [tappa(0, 0.01), tappa(0.015, 0.02)] })
     expect(parts).toHaveLength(2)
+  })
+})
+
+describe('catalogo ministero', () => {
+  const ids = Object.values(WAVES).flat().map(c => c.id)
+  it('ogni cammino importato è mappato (o esplicitamente non ancora nel catalogo ricevuto)', () => {
+    for (const id of ids) expect(Object.keys(MINISTERO_MAP), id).toContain(id)
+    for (const id of Object.keys(MINISTERO_MAP)) expect(ids, `${id} non è nei manifest`).toContain(id)
+  })
+  it('i nomi mappati esistono nel catalogo e danno un URL valido', () => {
+    for (const [id, name] of Object.entries(MINISTERO_MAP)) {
+      if (!name) continue
+      expect(CATALOGO.some(c => c.name === name), `${id} → ${name}`).toBe(true)
+      const u = officialUrlFor(id)
+      if (u) expect(u, id).toMatch(/^https?:\/\//)
+    }
+  })
+  it('scarta i segnaposto che rimandano al catalogo del ministero', () => {
+    expect(officialUrlFor('cammino-dei-francescani-abruzzo')).toBeNull()
+    expect(officialUrlFor('percorso-santa-spina')).toBeNull()
+  })
+  it("corregge i link malformati del catalogo (Acqua, Sette Sorelle)", () => {
+    expect(officialUrlFor('cammino-dellacqua')).toBe('https://www.camminodellacqua.org/')
+    expect(officialUrlFor('cammino-delle-sette-sorelle')).toBe('http://www.camminodellesettesorelle.it/')
   })
 })

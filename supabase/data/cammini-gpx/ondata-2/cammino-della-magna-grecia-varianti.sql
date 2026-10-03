@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino della Magna Grecia — Varianti$q$, 'cammino', 39.15419651431783, 16.95531166797161, $q$Calabria$q$, 'gpx', 'cammino/cammino-della-magna-grecia-varianti', 0.9,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino della Magna Grecia — Varianti$q$, 'cammino', 39.15419651431783, 16.95531166797161, $q$Calabria$q$, $q$https://camminomagnagrecia.altervista.org/$q$, 'gpx', 'cammino/cammino-della-magna-grecia-varianti', 0.9,
     $q${"kind":"cammino","theme":"storico","lengthM":10384,"tappeCount":1,"tappeSource":"official","start":{"name":"Eremo della Via Sacra","lat":39.16325252411399,"lon":16.9936540672958},"end":{"name":"Santa Severina","lat":39.14695787760364,"lon":16.91152151756781},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":1,"totalKm":10.4,"connected":true,"maxTappaKm":10.4,"namedShare":1,"officialTappe":1,"computedTappe":0,"longTappe":0,"shortTappe":0},"structure":"rete"}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$ia`nFiavfBqSvgAzVuGtf@lZiWtjA`j@hp@cKx^j[`f@wQfh@xKtwAzm@fqAcPvL$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

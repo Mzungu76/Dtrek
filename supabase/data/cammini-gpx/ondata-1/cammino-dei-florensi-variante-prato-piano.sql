@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammino dei Florensi — Variante Prato Piano$q$, 'cammino', 39.26244621165097, 16.43969834782183, $q$Calabria$q$, 'gpx', 'cammino/cammino-dei-florensi-variante-prato-piano', 0.9,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino dei Florensi — Variante Prato Piano$q$, 'cammino', 39.26244621165097, 16.43969834782183, $q$Calabria$q$, $q$https://www.moccivo.it/il-cammino-dei-florensi/il-cammino$q$, 'gpx', 'cammino/cammino-dei-florensi-variante-prato-piano', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":96175,"tappeCount":5,"tappeSource":"official","start":{"name":"Celico","lat":39.309323178604245,"lon":16.335808178409934},"end":{"name":"San Giovanni in Fiore","lat":39.253057558089495,"lon":16.700937543064356},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":5,"totalKm":100.1,"connected":true,"maxTappaKm":22.4,"namedShare":1,"officialTappe":5,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$gr|nFyqubBgJ}k@zNmBqKeWxOrGqK}RhJxBlEk]o\_g@\g[zC`Rfb@hEdBgMtGtNGsN|\d^pf@mFbRwwBtUzmAja@wc@|Au[~SwEnB}j@rP@~CjhAbVdMcMjTtKl[kGvHtL`j@kAhgAhNaInHzWhZoN_EsXrc@ow@vAw_@iQmYka@zUUyNcUd@na@gdAiEw_@pd@e@gPqg@sDmfAlSsPqQsc@c@yh@hV}bCt^il@tWzU`q@{I`g@f\|Hes@bXBjYg^yJv@cQob@cWxHcKeKeWtI`EzeAko@qV{sBh_@e@yMyLrMzCkMqQy]pP_TrLbGxY{Odf@u}@pt@qd@wAyNdT}MxQkr@_Syz@aWzPpU}^mL{r@_t@fCbFyq@cM{OfMfReFdp@{KugAjFeu@z\{y@HsVcI[vNatAnQkMh\xd@x[aMyKqE`DmMbv@~R`EgOE{o@u]iwAxHajArXmv@wJoNtLuy@_m@xTIsq@oMxEyEqdAcO}YfScu@kZIyPhZe\kg@i`@rB{Lon@}PfVoVmQOdk@aNzE_Ha~@aSuUrD_}@`QwSyOcR|k@_{AuS}SySzFff@ofAxLeAjDc[xPgH|Cu^$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

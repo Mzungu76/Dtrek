@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, source, source_id, confidence, metadata)
-  values ($q$Cammini della Madonna del Monticino$q$, 'cammino', 44.222116470336914, 11.774275302886963, $q$Emilia-Romagna$q$, 'gpx', 'cammino/cammini-madonna-del-monticino', 0.9,
+  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammini della Madonna del Monticino$q$, 'cammino', 44.222116470336914, 11.774275302886963, $q$Emilia-Romagna$q$, $q$http://www.parrocchiabrisighella.it/cammini-della-madonna-del-monticino-e-percorsi-medievali/$q$, 'gpx', 'cammino/cammini-madonna-del-monticino', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":81100,"tappeCount":5,"tappeSource":"official","start":{"name":"Madonna del Monticino","lat":44.221046855673194,"lon":11.769530894234776},"end":{"name":"Madonna del Monticino","lat":44.220915930345654,"lon":11.769730048254132},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":5,"totalKm":82.8,"connected":true,"maxTappaKm":31.2,"namedShare":1,"officialTappe":5,"computedTappe":0,"longTappe":0,"shortTappe":0},"structure":"rete"}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$q|{lGqvyfAoSeG}J`n@zIrdBpUjMsS`b@o_@nCoc@faAoZ{IaBlP}W}h@{RUw{@abAuElRaj@el@zP{c@cJcOvFqX`_@eCbq@da@rOmEoAgYzn@aA~c@kzB|f@w\hkAfkEbWhAtKi`@`OjIh@da@hZ~MtNpv@o\bf@|BnIiBcOnUmJhz@t`C_O~EyBgRuDlOcVmUcSpGxHvKmc@IvC`Lyn@|@geAmqBrF}h@kUz@eC{X`Tck@mL{xAzNgu@pOjNmTy}@~P_|@nMhIxLkUfLbNwBaOxSiEhR_|@w@eu@k\aVxAmN|]oHeK{Pdj@yf@lEco@v^_LoRtKVaSsUs@a]aj@_`@nFkZwQq`@vRx@l\wRnMzC~RmLjQa`@ycAePOmF|l@eTbXvPv\eEbeAgSkHqAdh@m]~n@hGliAiXjlAhVf\iEp~@bJhR`CmLd^vEpUcn@n\fm@ba@kK`Lgn@dTfHiOg[aR~QdKzD}Hdh@xHzc@XcqArU`DsOsgA`T}JpHrOpk@{@rRrp@ko@hAuHjSsMyJcG`VrAuL$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)
