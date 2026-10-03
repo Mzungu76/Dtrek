@@ -52,7 +52,35 @@ describe('buildFromGpxFiles', () => {
     expect(built.tappe[0].name).toContain('Tappa 01')
     expect(built.tappe[1].name).toContain('Tappa 02')
     expect(built.tappe.every(t => t.source === 'official')).toBe(true)
-    expect(skipped).toEqual([{ filename: 'tappa-02-variante.gpx', reason: 'variante: non entra nella sequenza principale' }])
+    expect(skipped).toEqual([{ filename: 'tappa-02-variante.gpx', reason: 'variante: non entra nella sequenza principale, salvata come variante' }])
+  })
+
+  it('salva le varianti invece di scartarle, agganciate all\'ordinal della tappa giusta', () => {
+    const { variants } = buildFromGpxFiles(
+      [
+        { filename: 'tappa-01.gpx', xml: TAPPA_01 },
+        { filename: 'tappa-02.gpx', xml: TAPPA_02 },
+        { filename: 'tappa-02-variante.gpx', xml: TAPPA_02_VARIANTE },
+      ],
+      info, [],
+    )
+    expect(variants).toHaveLength(1)
+    expect(variants[0].tappaOrdinal).toBe(2)
+    expect(variants[0].filename).toBe('tappa-02-variante.gpx')
+    expect(variants[0].polyline.length).toBeGreaterThan(0)
+  })
+
+  it('con mainSequenceIsVariant, i file "variante" entrano nella sequenza principale (es. Via Litoranea)', () => {
+    const mare01 = `<?xml version="1.0"?><gpx><trk><name>Variante Mare 01 - Da Monte Sant'Angelo a Manfredonia</name><trkseg>
+<trkpt lat="41.70" lon="15.93"></trkpt><trkpt lat="41.62" lon="15.91"></trkpt>
+</trkseg></trk></gpx>`
+    const { built, skipped } = buildFromGpxFiles(
+      [{ filename: 'variante-mare-01.gpx', xml: mare01 }],
+      { id: 'x', name: 'X', theme: 'naturalistico', mainSequenceIsVariant: true, numberPatterns: [/mare\s*(\d+)/i] },
+      [],
+    )
+    expect(skipped).toEqual([])
+    expect(built.tappe).toHaveLength(1)
   })
 
   it('tiene solo la prima tappa quando un numero compare due volte', () => {
