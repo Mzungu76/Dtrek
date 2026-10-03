@@ -350,7 +350,7 @@ export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewCha
       for (const item of camminiToDraw) {
         if (item.metaType !== 'cammino' || !item.camminoStats) continue
         const isSelected = selected?.kind === 'meta' && selected.item.id === item.id
-        const line = L.polyline(item.camminoStats.overviewPolyline, {
+        const line = L.polyline(item.camminoStats.overviewParts ?? item.camminoStats.overviewPolyline, {
           color: META_TYPE_CONFIG.cammino.color, weight: isSelected ? 5 : 3.5, opacity: isSelected ? 0.9 : 0.75,
         })
         line.on('click', () => { setSelected({ kind: 'meta', item }); setSheetExpanded(false) })

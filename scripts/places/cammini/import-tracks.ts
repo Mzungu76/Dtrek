@@ -158,14 +158,30 @@ export function buildTrackCammino(spec: CamminoSpec, src: string, anchors: Tappa
 const sqlStr = (s: string | null | undefined) => (s == null ? 'null' : `$q$${s}$q$`)
 const poly = (l: LatLon[]) => `pg_temp.dpoly($q$${encodePolyline(l)}$q$)`
 
+/**
+ * Panoramica a pezzi: una tappa che non riparte da dove finisce la precedente (varianti, traghetti, trasferimenti) apre un
+ * pezzo nuovo, così la mappa non disegna rette fra tratti scollegati. Soglia: 300 m per le reti di varianti, CONNECT_M per i cammini.
+ */
+export function overviewParts(b: Pick<BuiltTrackCammino, 'tappe' | 'spec'>): LatLon[][] {
+  const maxGap = b.spec.structure === 'rete' ? 300 : CONNECT_M
+  const parts: LatLon[][] = []
+  for (const t of b.tappe) {
+    const cur = parts[parts.length - 1]
+    if (cur && polylineLengthM([cur[cur.length - 1], t.polyline[0]]) <= maxGap) cur.push(...t.polyline)
+    else parts.push(t.polyline.slice())
+  }
+  return parts.map(p => simplifyPolyline(p, OVERVIEW_TOLERANCE_M))
+}
+
 export function camminoSql(b: BuiltTrackCammino): string {
   const { spec } = b
   const [lat, lon] = midpoint(b.line)
   const first = b.tappe[0].polyline[0], last = b.tappe[b.tappe.length - 1].polyline.slice(-1)[0]
+  const parts = overviewParts(b)
   const meta = {
     kind: 'cammino', theme: spec.theme, lengthM: Math.round(b.lengthM), tappeCount: b.tappe.length, tappeSource: 'official',
     start: { name: b.tappe[0].from ?? null, lat: first[0], lon: first[1] }, end: { name: b.tappe[b.tappe.length - 1].to ?? null, lat: last[0], lon: last[1] },
-    ref: null, network: null, trackSource: 'gpx', quality: b.quality, ...(spec.structure === 'rete' ? { structure: 'rete' } : {}),
+    ref: null, network: null, trackSource: 'gpx', quality: b.quality, ...(parts.length > 1 ? { overviewParts: parts.map(p => p.map(([la, lo]) => [Math.round(la * 1e5) / 1e5, Math.round(lo * 1e5) / 1e5])) } : {}), ...(spec.structure === 'rete' ? { structure: 'rete' } : {}),
   }
   const sid = `cammino/${spec.id}`
   const uuid = (id?: string) => (id ? `'${id}'::uuid` : 'null')

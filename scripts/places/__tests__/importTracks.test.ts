@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { orientSequence, resolveTappaLine } from '../cammini/import-tracks'
+import { orientSequence, overviewParts, resolveTappaLine } from '../cammini/import-tracks'
 import { WAVES } from '../cammini/tracks'
 import type { LatLon } from '../../../lib/cammini/geometry'
 
@@ -31,5 +31,19 @@ describe('import-tracks', () => {
       if (c.id.includes('florensi')) continue
       expect(new Set(keys).size, c.id).toBe(keys.length)
     }
+  })
+})
+
+describe('overviewParts', () => {
+  const seg = (a: number, b: number): LatLon[] => [[0, a], [0, b]]
+  const tappa = (a: number, b: number) => ({ polyline: seg(a, b) }) as never
+  it('unisce le tappe collegate e stacca i pezzi separati', () => {
+    const parts = overviewParts({ spec: { structure: 'cammino' } as never, tappe: [tappa(0, 0.01), tappa(0.01, 0.02), tappa(0.5, 0.51)] })
+    expect(parts).toHaveLength(2)
+    expect(parts[0][parts[0].length - 1]).toEqual([0, 0.02])
+  })
+  it('in una rete ogni variante scollegata (oltre 300 m) è un pezzo a sé', () => {
+    const parts = overviewParts({ spec: { structure: 'rete' } as never, tappe: [tappa(0, 0.01), tappa(0.015, 0.02)] })
+    expect(parts).toHaveLength(2)
   })
 })
