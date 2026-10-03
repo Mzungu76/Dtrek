@@ -105,13 +105,20 @@ export function orientSequence(tappe: { polyline: LatLon[] }[]): void {
   }
 }
 
+/** Linea di una tappa: una traccia (o più, concatenate) da uno o più file. */
+function specLine(src: string, spec: TappaSpec): LatLon[] {
+  const files = [spec.file, ...(spec.moreFiles ?? [])]
+  if (files.length === 1) return resolveTappaLine(tracksOf(src, spec.file), spec)
+  return chainSegments(files.map(f => resolveTappaLine(tracksOf(src, f), { ...spec, file: f })))
+}
+
 export function buildTrackCammino(spec: CamminoSpec, src: string, anchors: TappaAnchor[] = []): BuiltTrackCammino {
   let tappe: BuiltTappa[]
   if (spec.computeTappe) {
     // Traccia unica: si taglia a budget di giornata sui borghi del catalogo (come l'import OSM senza tappe ufficiali).
     if (spec.tappe.length !== 1) throw new Error(`${spec.id}: computeTappe richiede una sola traccia`)
     if (anchors.length === 0) throw new Error(`${spec.id}: mancano le ancore (anchors/${spec.id}.json)`)
-    const raw = resolveTappaLine(tracksOf(src, spec.tappe[0].file), spec.tappe[0])
+    const raw = specLine(src, spec.tappe[0])
     const drafts = splitIntoTappe(raw, anchors, spec.split)
     const first = drafts[0], last = drafts[drafts.length - 1]
     if (spec.tappe[0].from && !first.fromName) first.fromName = spec.tappe[0].from
@@ -122,7 +129,7 @@ export function buildTrackCammino(spec: CamminoSpec, src: string, anchors: Tappa
     }))
   } else {
     tappe = spec.tappe.map((s, i) => {
-      const raw = resolveTappaLine(tracksOf(src, s.file), s)
+      const raw = specLine(src, s)
       return { ordinal: i + 1, name: s.name ?? `Tappa ${String(i + 1).padStart(2, '0')}`, from: s.from, to: s.to, lengthM: polylineLengthM(raw), polyline: simplifyPolyline(raw, TAPPA_TOLERANCE_M), source: 'official' as const }
     })
     if (spec.structure === 'cammino') orientSequence(tappe)
@@ -264,9 +271,12 @@ function main() {
   if (process.argv.includes('--anchors-sql')) {
     // Query (sola lettura) per ottenere i borghi entro ANCHOR_M dalla traccia: il risultato va salvato in anchors/<id>.json.
     for (const spec of specs.filter(s => s.computeTappe)) {
-      const raw = resolveTappaLine(tracksOf(src, spec.tappe[0].file), spec.tappe[0])
-      const wkt = simplifyPolyline(raw, 100).map(([la, lo]) => `${lo.toFixed(5)} ${la.toFixed(5)}`).join(',')
-      console.log(`-- ${spec.id}\nselect json_agg(json_build_array(b.id, b.name, round(b.latitude::numeric, 5), round(b.longitude::numeric, 5), b.population) order by b.name) from dtrek_places b where b.meta_type = 'borgo_citta' and (b.population is null or b.population >= 300) and st_dwithin(b.geometry::geography, st_geomfromtext('LINESTRING(${wkt})', 4326)::geography, ${ANCHOR_M});`)
+      const raw = specLine(src, spec.tappe[0])
+      // Linee lunghe: query più leggera (linea semplificata a 400 m, raggio allargato in proporzione); lo split filtra comunque a 1,5 km.
+      const long = polylineLengthM(raw) > 150_000
+      const tol = long ? 400 : 100, radius = ANCHOR_M + (long ? 400 : 0), minPop = spec.split?.minPopulation ?? 300
+      const wkt = simplifyPolyline(raw, tol).map(([la, lo]) => `${lo.toFixed(5)} ${la.toFixed(5)}`).join(',')
+      console.log(`-- ${spec.id}\nselect json_agg(json_build_array(b.id, b.name, round(b.latitude::numeric, 5), round(b.longitude::numeric, 5), b.population) order by b.name) from dtrek_places b where b.meta_type = 'borgo_citta' and (b.population is null or b.population >= ${minPop}) and st_dwithin(b.geometry::geography, st_geomfromtext('LINESTRING(${wkt})', 4326)::geography, ${radius});`)
     }
     return
   }

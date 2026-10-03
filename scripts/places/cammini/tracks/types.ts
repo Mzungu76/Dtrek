@@ -6,6 +6,8 @@
 export interface TappaSpec {
   /** File (GPX/KML) relativo alla cartella sorgente. */
   file: string
+  /** Altri file da concatenare dopo `file` (es. una traccia per regione), nell'ordine di percorrenza. */
+  moreFiles?: string[]
   /** Se il file contiene più tracce: espressione sul nome della traccia (decodificato). Senza: tutte, concatenate. */
   track?: string
   /** Nome mostrato; default `Tappa <ordinale>`. */
