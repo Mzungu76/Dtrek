@@ -75,3 +75,13 @@ describe('polylineDistanceKm', () => {
     expect(polylineDistanceKm(line, { lat: 43, lon: 13 })).toBeGreaterThan(70)
   })
 })
+
+describe('camminoStatsFromMetadata — overviewParts', () => {
+  const base = { kind: 'cammino', overviewPolyline: [[1, 1], [2, 2], [3, 3], [4, 4]], lengthM: 1000, tappeCount: 2 }
+  it('espone i pezzi staccati solo se sono più di uno e validi', () => {
+    const two = camminoStatsFromMetadata({ ...base, overviewParts: [[[1, 1], [2, 2]], [[3, 3], [4, 4]]] })
+    expect(two?.overviewParts).toHaveLength(2)
+    expect(camminoStatsFromMetadata({ ...base, overviewParts: [[[1, 1], [2, 2]]] })?.overviewParts).toBeUndefined()
+    expect(camminoStatsFromMetadata({ ...base, overviewParts: 'x' })?.overviewParts).toBeUndefined()
+  })
+})

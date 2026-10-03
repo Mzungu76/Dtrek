@@ -99,6 +99,8 @@ export interface CamminoStats {
   quality: 'pronto' | 'da_rivedere'
   /** Panoramica del tracciato per la mappa, [lat, lon][] già semplificata. */
   overviewPolyline: [number, number][]
+  /** Panoramica a pezzi staccati (varianti, salti fra tappe): da disegnare come linee separate, senza rette fra l'una e l'altra. */
+  overviewParts?: [number, number][][]
 }
 
 // Un risultato normalizzato, sufficiente per una card (piano §24) — mai con campi vuoti

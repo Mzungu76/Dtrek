@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { orientSequence, resolveTappaLine } from '../cammini/import-tracks'
-import { TRACK_CAMMINI } from '../cammini/tracks-manifest'
+import { orientSequence, overviewParts, resolveTappaLine } from '../cammini/import-tracks'
+import { WAVES } from '../cammini/tracks'
 import type { LatLon } from '../../../lib/cammini/geometry'
 
 describe('import-tracks', () => {
@@ -23,13 +23,27 @@ describe('import-tracks', () => {
     expect(() => resolveTappaLine(tracks, { file: 'f', track: 'zzz' })).toThrow(/Nessuna traccia/)
   })
   it('manifest: id unici e senza tappe duplicate nei percorsi principali', () => {
-    const ids = TRACK_CAMMINI.map(c => c.id)
+    const ids = Object.values(WAVES).flat().map(c => c.id)
     expect(new Set(ids).size).toBe(ids.length)
-    for (const c of TRACK_CAMMINI) {
+    for (const c of Object.values(WAVES).flat()) {
       if (c.structure !== 'cammino') continue
       const keys = c.tappe.map(t => `${t.file}|${t.track ?? ''}`)
       if (c.id.includes('florensi')) continue
       expect(new Set(keys).size, c.id).toBe(keys.length)
     }
+  })
+})
+
+describe('overviewParts', () => {
+  const seg = (a: number, b: number): LatLon[] => [[0, a], [0, b]]
+  const tappa = (a: number, b: number) => ({ polyline: seg(a, b) }) as never
+  it('unisce le tappe collegate e stacca i pezzi separati', () => {
+    const parts = overviewParts({ spec: { structure: 'cammino' } as never, tappe: [tappa(0, 0.01), tappa(0.01, 0.02), tappa(0.5, 0.51)] })
+    expect(parts).toHaveLength(2)
+    expect(parts[0][parts[0].length - 1]).toEqual([0, 0.02])
+  })
+  it('in una rete ogni variante scollegata (oltre 300 m) è un pezzo a sé', () => {
+    const parts = overviewParts({ spec: { structure: 'rete' } as never, tappe: [tappa(0, 0.01), tappa(0.015, 0.02)] })
+    expect(parts).toHaveLength(2)
   })
 })

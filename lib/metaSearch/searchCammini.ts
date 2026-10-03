@@ -33,6 +33,8 @@ export function camminoStatsFromMetadata(metadata: Record<string, unknown> | nul
   if (!Array.isArray(poly) || poly.length < 2) return null
   const quality = (metadata.quality as { status?: string } | undefined)?.status === 'pronto' ? 'pronto' : 'da_rivedere'
   const source = metadata.tappeSource
+  const rawParts = metadata.overviewParts
+  const parts = Array.isArray(rawParts) && rawParts.every(p => Array.isArray(p) && p.length >= 2) ? (rawParts as [number, number][][]) : undefined
   return {
     lengthM: typeof metadata.lengthM === 'number' ? metadata.lengthM : 0,
     tappeCount: typeof metadata.tappeCount === 'number' ? metadata.tappeCount : 0,
@@ -40,6 +42,7 @@ export function camminoStatsFromMetadata(metadata: Record<string, unknown> | nul
     structure: metadata.structure === 'rete' ? 'rete' : 'cammino',
     quality,
     overviewPolyline: poly as [number, number][],
+    ...(parts && parts.length > 1 ? { overviewParts: parts } : {}),
   }
 }
 
