@@ -221,3 +221,12 @@ Scelta dopo i mockup (concept B), con queste regole:
 - **Servizi precaricati**: come i luoghi, vivono in `dtrek_cammino_tappe.services` e la guida li legge da lì. Per non far aspettare la prima lettura (fino a 25 s) c'è il workflow manuale `prefetch-cammini-services.yml` (`scripts/places/cammini/prefetch-services.ts`): legge da OpenStreetMap tutte le tappe, una alla volta con pausa, e salva; dry-run di default, salta le tappe lette da meno di 90 giorni, `--refresh` per rileggere. Le tappe nuove continuano a leggersi alla prima apertura.
 - **Mappa**: `MapView` ricostruisce la mappa quando cambia l'identità di `trackPoints` e i livelli di marcatori (POI, servizi, wiki, flora, ecc.) ora si rifanno anche a ogni ricostruzione (`mapGen`); in `CamminoTappaDetail` `trackPoints` è memoizzato. Prima, accendere/spegnere un filtro dei servizi faceva sparire tutte le icone.
 - Da fare: fonte dedicata per gli alloggi (cammini con ostelli del pellegrino, rifugi: `docs/rifugi-progettazione.md`), segnalazioni della community per confermare/segnalare, percorsi a piedi reali verso i servizi (oggi linea d'aria), orari dei mezzi.
+
+## Import da tracce GPX/KML degli enti
+
+Per i cammini di cui l'ente fornisce le tracce (non presenti o incomplete su OSM) c'è una pipeline separata da quella OSM:
+
+- `scripts/places/cammini/tracks-manifest.ts`: per ogni cammino, quali file/tracce sono le tappe, nomi dei capi, `structure` (`cammino` = sequenza, `rete` = varianti/percorsi alternativi). Origine `source = 'gpx'`, `source_id = cammino/<id>`.
+- `scripts/places/cammini/import-tracks.ts --src <zip scompattati> [--only <id>] --sql supabase/data/cammini-gpx`: legge GPX/KML, orienta le tappe lungo la sequenza (alcune tracce sono registrate al contrario), controlla la continuità (tappe a più di 2 km → «da rivedere»), semplifica a 15 m e scrive uno `.sql` per cammino.
+- `supabase/data/cammini-gpx/*.sql`: idempotenti e autosufficienti (decodifica delle polilinee con una funzione temporanea). Eseguirli, poi `zz-anchors.sql` (aggancia i capi tappa ai borghi entro 1,5 km, riempie i nomi mancanti, crea le relazioni `near`). Quote e POI/servizi si calcolano al primo bisogno, come per i cammini OSM.
+- Le tappe «da rivedere» (es. Cammino dei Francescani, 11 tratti senza ordine) non compaiono nella ricerca finché `metadata.quality.status` non viene portato a `pronto`.

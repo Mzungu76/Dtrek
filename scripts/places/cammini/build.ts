@@ -203,7 +203,7 @@ export function buildCammino(
 }
 
 // Punto del cammino a metà della sua lunghezza — è il pin in mappa e la coordinata di ricerca.
-function midpoint(line: LatLon[]): LatLon {
+export function midpoint(line: LatLon[]): LatLon {
   const half = polylineLengthM(line) / 2
   let acc = 0
   for (let i = 1; i < line.length; i++) {
