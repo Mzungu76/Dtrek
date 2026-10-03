@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { orientSequence, overviewParts, resolveTappaLine } from '../cammini/import-tracks'
 import { WAVES } from '../cammini/tracks'
-import { CATALOGO, MINISTERO_MAP, officialUrlFor } from '../cammini/tracks/ministero'
+import { CATALOGO, DESCRIPTION_EXCLUDED, DESCRIZIONI, MINISTERO_MAP, descriptionFor, officialUrlFor } from '../cammini/tracks/ministero'
 import type { LatLon } from '../../../lib/cammini/geometry'
 
 describe('import-tracks', () => {
@@ -58,10 +58,22 @@ describe('catalogo ministero', () => {
   it('i nomi mappati esistono nel catalogo e danno un URL valido', () => {
     for (const [id, name] of Object.entries(MINISTERO_MAP)) {
       if (!name) continue
-      expect(CATALOGO.some(c => c.name === name), `${id} → ${name}`).toBe(true)
+      expect(CATALOGO.some(c => c.name === name) || DESCRIZIONI.some(c => c.name === name), `${id} → ${name}`).toBe(true)
       const u = officialUrlFor(id)
       if (u) expect(u, id).toMatch(/^https?:\/\//)
     }
+  })
+  it('ogni cammino mappato ha una descrizione, tranne varianti, esclusioni motivate e quelli assenti dal file', () => {
+    const missing = Object.keys(MINISTERO_MAP).filter(id => !id.endsWith('-varianti') && !(id in DESCRIPTION_EXCLUDED) && !descriptionFor(id))
+    expect(missing.sort()).toEqual(['cammino-di-san-bartolomeo'])
+  })
+  it('le varianti e le esclusioni non ricevono la descrizione del cammino principale', () => {
+    expect(descriptionFor('cammino-di-assisi-varianti')).toBeNull()
+    expect(descriptionFor('cammino-protomartiri-francescani')).toBeNull()
+    expect(descriptionFor('cammino-di-assisi')).toMatch(/Assisi/)
+  })
+  it('il sito di San Michele arriva dal file delle descrizioni (pagina del ministero non ancora ricevuta)', () => {
+    expect(officialUrlFor('cammino-di-san-michele')).toBe('https://www.camminodisanmichele.org/')
   })
   it('scarta i segnaposto che rimandano al catalogo del ministero', () => {
     expect(officialUrlFor('cammino-dei-francescani-abruzzo')).toBeNull()

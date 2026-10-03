@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values ($q$Cammino dei Picentini$q$, 'cammino', 40.7257596961575, 15.040767255909, $q$Campania$q$, $q$https://ilcamminodeipicentini.it/$q$, 'gpx', 'cammino/cammino-dei-picentini', 0.9,
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino dei Picentini$q$, 'cammino', $q$Percorso nell’area dei Monti Picentini, tra Campania interna, borghi, santuari, natura e testimonianze della tradizione religiosa.$q$, 40.7257596961575, 15.040767255909, $q$Campania$q$, $q$https://ilcamminodeipicentini.it/$q$, 'gpx', 'cammino/cammino-dei-picentini', 0.9,
     $q${"kind":"cammino","theme":"naturalistico","lengthM":102498,"tappeCount":7,"tappeSource":"official","start":{"name":null,"lat":40.7038827538697,"lon":14.834289432384},"end":{"name":null,"lat":40.7038827538697,"lon":14.834289432384},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":7,"totalKm":104.4,"connected":true,"maxTappaKm":21.5,"namedShare":0,"officialTappe":7,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$g~lwFiipyAeNrf@gVa@zKoXi`AjRwr@kMqKurAdT}O`a@b^l\sa@s\ecBfBsr@e]lCmC_mA}TcH[mb@me@XNk\sVa[og@{H_`@lBkS|^gg@oGyc@hSaEcPrd@og@{L{QzXoRiHi]gbBeFgUoKb@kQqUll@xVc~@eDciApTemAqGaWxM_aC|M_^sEiNlh@os@uBu`@rQpJbXm}A_k@xE}[qTem@ynApC_m@hYtc@rpBjUrXtRhL~i@hIaLtFhLeIeiCnVyqAwPkh@lqA{a@~Qpz@dj@zk@lf@{LlT|UdeAhQbMhr@}Fn`Az~@jiDjOsRnZr\~q@ydAbCiXqVqFzIgyAt`@e^{D_VzSyYgLGySmt@iY}FtZiHd`@f^p`ApUrn@f_AdRkCjZjXvBl[wKuOcGxc@bu@~vCyf@dzApd@xa@_]j_AaxAkv@m[Zk_@fd@j_@|MeOpp@}SvVal@oAfLxOwUjDtUf|AgDj}@p}@j|An]`FnOrf@{ElRxX`ItWv`BuLvQof@cL_\rI{NrZcn@cYsS`U|P~I_HvUgN|A_Tnj@}S_Ek_@dRoQnc@kNqEuLrgAy^l^$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

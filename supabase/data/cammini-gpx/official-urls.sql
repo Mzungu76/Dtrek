@@ -29,6 +29,8 @@ from (values
   ('cammino/cammino-dellacqua-varianti', $q$https://www.camminodellacqua.org/$q$),
   ('cammino/cammino-di-oropa', $q$https://www.camminodioropa.it/$q$),
   ('cammino/cammino-di-oropa-varianti', $q$https://www.camminodioropa.it/$q$),
+  ('cammino/cammino-di-san-michele', $q$https://www.camminodisanmichele.org/$q$),
+  ('cammino/cammino-di-san-michele-varianti', $q$https://www.camminodisanmichele.org/$q$),
   ('cammino/cammino-di-san-bartolomeo', $q$https://camminodisanbartolomeo.com/$q$),
   ('cammino/cammino-di-hasekura', $q$https://www.camminodihasekura.it/$q$),
   ('cammino/cammino-di-don-tonino', $q$https://www.camminodidontonino.it/$q$),

@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values ($q$Percorso della Santa Spina$q$, 'cammino', 39.11198618776749, 16.77470392463604, $q$Calabria$q$, null, 'gpx', 'cammino/percorso-santa-spina', 0.9,
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Percorso della Santa Spina$q$, 'cammino', $q$Breve itinerario calabrese dedicato alla devozione della Santa Spina e ai luoghi di culto collegati alla tradizione locale.$q$, 39.11198618776749, 16.77470392463604, $q$Calabria$q$, null, 'gpx', 'cammino/percorso-santa-spina', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":3678,"tappeCount":1,"tappeSource":"official","start":{"name":null,"lat":39.1102953926835,"lon":16.79396882654575},"end":{"name":null,"lat":39.104270843602,"lon":16.76865081183454},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":1,"totalKm":3.9,"connected":true,"maxTappaKm":3.9,"namedShare":0,"officialTappe":1,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$kvumFiaoeBwS~sApc@tfAzTp@$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

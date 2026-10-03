@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values ($q$Cammino Basiliano — Tratto lucano$q$, 'cammino', 39.97393869794905, 16.08226826414466, $q$Basilicata$q$, $q$https://www.camminobasiliano.it/$q$, 'gpx', 'cammino/cammino-basiliano-tratto-lucano', 0.9,
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino Basiliano — Tratto lucano$q$, 'cammino', $q$Grande itinerario dell’Italia meridionale che attraversa Calabria e Basilicata seguendo antiche vie legate alla presenza monastica basiliana, tra montagne, borghi e luoghi di culto.$q$, 39.97393869794905, 16.08226826414466, $q$Basilicata$q$, $q$https://www.camminobasiliano.it/$q$, 'gpx', 'cammino/cammino-basiliano-tratto-lucano', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":91058,"tappeCount":6,"tappeSource":"official","start":{"name":"Lauria","lat":40.04089585505426,"lon":15.835524145513773},"end":{"name":"Alessandria del Carretto","lat":39.959026873111725,"lon":16.379995811730623},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":6,"totalKm":93.2,"connected":true,"maxTappaKm":18.7,"namedShare":1,"officialTappe":6,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$snksF_{s_B~JbA}CiTjP_\aMt@~@_j@iH|NuCoMlR_e@xKEm[o`@~Uag@`n@kPlx@i_Al~@wxDgs@s}@jHau@wJ}i@nc@{s@fD}a@bRpAgN}WpNqPuLif@rFwmABtb@xMtGyHfIjNrI~JqTsHup@`_@oq@_@w|@oUccA~IadB{QmN|Zql@qLyXtUkWuGgLfRmHsB_^hPwNlVlD~Rri@lKgXzlAoBdPzXhU_m@pfAf~@h]fDbwAkl@oSwOuN}`Be`@ok@|CoI}n@pDs`@_UfBlNuGsRsZ^or@qe@tAuM`KpHyFiT`\y|@wo@jAiWe~AoOo@|V_hAsv@}hAtKya@eWir@pk@ciBra@}XmCwPr}@_y@tZcAkE}c@zHtTtLoCdEv[zk@}CgEpNb_@lIux@tNdJqf@aWdBiEc\uLvCyMog@xTme@cR}\oCqtAmTuHc~@eyA_LifAmj@a|@jFgc@kYogAdEkP~_@pWtRwWkF_mAtt@czA}UoViDqpAn_AgfB}IqEnNwfAkQ|RGm]d\qeA|`@gb@fJeaAnKaE_HyQ$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)
