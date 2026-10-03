@@ -157,10 +157,17 @@ npx tsx scripts/places/cammini/importFromGpx.ts --zip Via-Francigena.zip \
 ```
 
 Lo zip ha una cartella per tratto, un file GPX per tappa numerata (`tappa-NN-...gpx`); i file con
-"variante" nel nome non entrano nella sequenza principale. Richiede `unzip` in PATH. Verificato sui
-GPX ufficiali reali: il tratto Gran San Bernardo–Roma risulta **pronto** (992 km, 45 tappe, tutte
-connesse); il tratto Roma–Leuca resta **da rivedere** per 7 scarti reali fra tappe nella fonte stessa
-(non un bug di questo script) — va controllato a mano prima di scriverlo con `--min-status da_rivedere`.
+"variante" nel nome non entrano nella sequenza principale. Richiede `unzip` in PATH (oppure `--dir`
+su una cartella già estratta). Entrambi i tratti sono scritti in Supabase: Gran San Bernardo–Roma
+**pronto** (992 km, 45 tappe, 14 varianti, tutte connesse); Roma–Leuca **da rivedere** (797 km, 38
+tappe, 8 varianti) per 7 numeri di tappa contesi nella fonte stessa — il nome del file e il `<name>`
+dentro il GPX sono scalati di una posizione da un certo punto in poi (non un bug di questo script),
+quindi non appare in ricerca finché qualcuno non lo rivede a mano e lo promuove a `pronto`.
+
+Per importare un nuovo cammino da GPX con questo stesso procedimento (incluse le varianti, che
+`importFromGpx.ts` scrive in `dtrek_cammino_tappe_varianti`), vedi la skill
+`.claude/skills/import-cammino-gpx/SKILL.md` — pensata per essere seguita anche da una sessione che
+non ha visto questo lavoro.
 
 ## 8. Fase 3 — ricerca e scheda (in app)
 
