@@ -1,0 +1,1052 @@
+[
+ {
+  "name": "Alta Via delle Grazie",
+  "descrizione": "Cammino alpino lombardo che collega Bergamo con la Val Seriana e l’Alto Sebino, unendo santuari, borghi, natura, arte e tradizioni locali.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "www.altaviadellegrazie.com"
+ },
+ {
+  "name": "Anello Cimino. Il cammino dei Santi Patroni",
+  "descrizione": "Percorso ad anello nell’area dei Monti Cimini, tra luoghi di culto, borghi, boschi e paesaggio vulcanico.",
+  "regioni": [
+   "Lazio"
+  ],
+  "sito": "www.anellocimino.itolomeo.com"
+ },
+ {
+  "name": "Cammini della Madonna del Monticino e Percorsi Medievali",
+  "descrizione": "Sistema di percorsi ad anello nell’area di Brisighella, tra santuario, borghi medievali, Vena del Gesso, calanchi e luoghi storici.",
+  "regioni": [
+   "Emilia-Romagna"
+  ],
+  "sito": "www.parrocchiabrisighella.it"
+ },
+ {
+  "name": "Cammino Basiliano",
+  "descrizione": "Grande itinerario dell’Italia meridionale che attraversa Calabria e Basilicata seguendo antiche vie legate alla presenza monastica basiliana, tra montagne, borghi e luoghi di culto.",
+  "regioni": [
+   "Basilicata",
+   "Calabria"
+  ],
+  "sito": "www.camminobasiliano.it"
+ },
+ {
+  "name": "Cammino degli Eremi",
+  "descrizione": "Percorso molisano tra Bojano, Sant’Elena Sannita, Spinete e Colle d’Anchise, caratterizzato da eremi, cappelle, chiese, borghi e paesaggi montani.",
+  "regioni": [
+   "Molise"
+  ],
+  "sito": "camminodeglieremi.altervista.org"
+ },
+ {
+  "name": "Cammino dei Cappuccini",
+  "descrizione": "Itinerario francescano nelle Marche legato alla storia dei Cappuccini, attraverso conventi, santuari, borghi e paesaggi appenninici.",
+  "regioni": [
+   "Marche"
+  ],
+  "sito": "www.camminodeicappuccini.it"
+ },
+ {
+  "name": "Cammino dei Florensi",
+  "descrizione": "Percorso calabrese legato alla figura di Gioacchino da Fiore e all’eredità florense, tra Sila, borghi, abbazie e paesaggi montani.",
+  "regioni": [
+   "Calabria"
+  ],
+  "sito": "www.moccivo.it"
+ },
+ {
+  "name": "Cammino dei Francescani",
+  "descrizione": "Itinerario abruzzese legato alla presenza e alla tradizione francescana, tra luoghi di culto, borghi e paesaggi dell’Appennino.",
+  "regioni": [
+   "Abruzzo"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino dei Frati Santi",
+  "descrizione": "Breve cammino calabrese dedicato alla memoria di santi e frati del territorio, con percorso tra luoghi religiosi e paesaggio locale.",
+  "regioni": [
+   "Calabria"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino dei Picentini",
+  "descrizione": "Percorso nell’area dei Monti Picentini, tra Campania interna, borghi, santuari, natura e testimonianze della tradizione religiosa.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": "ilcamminodeipicentini.it"
+ },
+ {
+  "name": "Cammino dei Protomartiri Francescani",
+  "descrizione": "Itinerario umbro sulle tracce dei primi martiri francescani, collegando Assisi e i luoghi della loro vicenda attraverso borghi e paesaggi umbri.",
+  "regioni": [
+   "Umbria"
+  ],
+  "sito": "www.camminoprotomartiri.it"
+ },
+ {
+  "name": "Cammino dei Santuari del Mare",
+  "descrizione": "Cammino ligure tra santuari e borghi del territorio costiero e dell’entroterra, con panorami sul mare e percorsi devozionali.",
+  "regioni": [
+   "Liguria"
+  ],
+  "sito": "camminodeisantuaridelmare.it"
+ },
+ {
+  "name": "Cammino del Beato Enrico da Bolzano",
+  "descrizione": "Percorso tra Veneto e Trentino-Alto Adige legato alla figura del beato Enrico, tra luoghi di culto, borghi e paesaggi alpini.",
+  "regioni": [
+   "Veneto",
+   "Trentino-Alto Adige"
+  ],
+  "sito": "compagniasantiagobeatoenrico.it"
+ },
+ {
+  "name": "Cammino del Perdono – Sui passi di Celestino",
+  "descrizione": "Itinerario tra Abruzzo e Molise dedicato a Celestino V, con borghi, eremi, luoghi della sua vita e paesaggi dell’Appennino.",
+  "regioni": [
+   "Abruzzo",
+   "Molise"
+  ],
+  "sito": "camminodelperdono.it"
+ },
+ {
+  "name": "Cammino del Salento",
+  "descrizione": "Percorso pugliese che attraversa il Salento da nord a sud tra piccoli centri, campagne, coste, masserie, chiese e luoghi della tradizione religiosa.",
+  "regioni": [
+   "Puglia"
+  ],
+  "sito": "www.camminodelsalento.it"
+ },
+ {
+  "name": "Cammino del Santo Marino",
+  "descrizione": "Percorso tra Emilia-Romagna e San Marino legato alla figura di San Marino e alla storia religiosa del territorio, tra borghi e paesaggi collinari.",
+  "regioni": [
+   "Emilia-Romagna"
+  ],
+  "sito": "www.sanmarinoexperience.com"
+ },
+ {
+  "name": "Cammino dell’Acqua",
+  "descrizione": "Cammino molisano dedicato al rapporto tra acqua, territorio e comunità, attraverso sorgenti, borghi, chiese e paesaggi dell’Appennino.",
+  "regioni": [
+   "Molise"
+  ],
+  "sito": "www.camminodellacqua.org"
+ },
+ {
+  "name": "Cammino dell’Angelo di Monte Faito",
+  "descrizione": "Itinerario campano legato al culto dell’Arcangelo Michele e al Monte Faito, tra santuari, montagne, boschi e panorami sul golfo.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": "www.ilcamminodellangelo.it"
+ },
+ {
+  "name": "Cammino dell’Arcangelo Michele in San Felice a Cancello",
+  "descrizione": "Breve itinerario campano dedicato al culto di San Michele, con riferimento ai luoghi religiosi di San Felice a Cancello.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino dell’Incoronata",
+  "descrizione": "Percorso tra Molise e Puglia legato alla devozione alla Madonna dell’Incoronata, attraverso territori rurali, borghi e luoghi di culto.",
+  "regioni": [
+   "Molise",
+   "Puglia"
+  ],
+  "sito": "camminoincoronata.wixsite.com"
+ },
+ {
+  "name": "Cammino della Madonna Nera",
+  "descrizione": "Itinerario lucano dedicato alla devozione mariana della Madonna Nera, tra santuari, borghi e paesaggi dell’Appennino meridionale.",
+  "regioni": [
+   "Basilicata"
+  ],
+  "sito": "www.camminomadonnanera.it"
+ },
+ {
+  "name": "Cammino della Magna Grecia con la Via Sacra e la Via dell’Asceta",
+  "descrizione": "Grande itinerario calabrese che unisce storia della Magna Grecia, antiche vie, luoghi religiosi, borghi e paesaggi montani e costieri.",
+  "regioni": [
+   "Calabria"
+  ],
+  "sito": "camminomagnagrecia.altervista.org"
+ },
+ {
+  "name": "Cammino della Pace",
+  "descrizione": "Percorso attraverso Abruzzo, Molise e Puglia che collega luoghi religiosi, memoria, paesaggio e tradizioni dei territori attraversati.",
+  "regioni": [
+   "Abruzzo",
+   "Molise",
+   "Puglia"
+  ],
+  "sito": "ilcamminodellapace.it"
+ },
+ {
+  "name": "Cammino della Santa Spina",
+  "descrizione": "Breve itinerario calabrese dedicato alla devozione della Santa Spina e ai luoghi di culto collegati alla tradizione locale.",
+  "regioni": [
+   "Calabria"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino della Vita",
+  "descrizione": "Breve percorso veneto dedicato ai temi della fede e della vita, tra luoghi religiosi e paesaggio locale.",
+  "regioni": [
+   "Veneto"
+  ],
+  "sito": "www.ilcamminodellavita.it"
+ },
+ {
+  "name": "Cammino delle 44 Chiesette Votive nelle Valli del Natisone",
+  "descrizione": "Percorso friulano tra le Valli del Natisone che collega 44 chiesette votive, borghi, boschi e testimonianze della cultura locale.",
+  "regioni": [
+   "Friuli-Venezia Giulia"
+  ],
+  "sito": "www.chiesettevotive.it"
+ },
+ {
+  "name": "Cammino delle Chiese campestri",
+  "descrizione": "Percorso molisano tra chiese rurali, tratturi, campagne e piccoli centri, valorizzando il patrimonio religioso diffuso.",
+  "regioni": [
+   "Molise"
+  ],
+  "sito": "www.ilcamminocampestre.it"
+ },
+ {
+  "name": "Cammino delle Sette Sorelle",
+  "descrizione": "Nuovo itinerario abruzzese dedicato a una rete di luoghi religiosi e comunità locali, attraverso paesaggi e borghi dell’Appennino.",
+  "regioni": [
+   "Abruzzo"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino di Assisi",
+  "descrizione": "Cammino tra Emilia-Romagna, Toscana e Umbria che conduce verso Assisi attraverso borghi, santuari, monasteri e paesaggi appenninici.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana",
+   "Umbria"
+  ],
+  "sito": "www.camminodiassisi.it"
+ },
+ {
+  "name": "Cammino di Don Tonino",
+  "descrizione": "Itinerario pugliese dedicato a don Tonino Bello, ai suoi luoghi di vita e alla sua testimonianza, tra borghi, campagne e luoghi di culto.",
+  "regioni": [
+   "Puglia"
+  ],
+  "sito": "www.camminodidontonino.it"
+ },
+ {
+  "name": "Cammino di Francesco nel Lazio",
+  "descrizione": "Percorso laziale sulle tracce di San Francesco, tra Rieti, valle reatina, eremi, conventi e paesaggi appenninici.",
+  "regioni": [
+   "Lazio"
+  ],
+  "sito": "www.camminodifrancesco.it"
+ },
+ {
+  "name": "Cammino di Hasekura e dei martiri giapponesi",
+  "descrizione": "Percorso nel Lazio legato alla storia della missione giapponese di Hasekura Tsunenaga e dei martiri cristiani giapponesi, tra Roma e luoghi religiosi.",
+  "regioni": [
+   "Lazio"
+  ],
+  "sito": "www.camminodihasekura.it"
+ },
+ {
+  "name": "Cammino di Oropa",
+  "descrizione": "Itinerario piemontese verso il Santuario di Oropa, tra Biellese, montagne, borghi, santuari e paesaggi alpini.",
+  "regioni": [
+   "Piemonte",
+   "Valle d’Aosta"
+  ],
+  "sito": "www.camminodioropa.it"
+ },
+ {
+  "name": "Cammino di Padre Giovanni",
+  "descrizione": "Percorso toscano legato alla figura di Padre Giovanni e alla spiritualità dei luoghi attraversati, tra borghi, campagne e colline.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": "sites.google.com"
+ },
+ {
+  "name": "Cammino di San Bernardino da Siena in Toscana",
+  "descrizione": "Itinerario toscano legato alla predicazione di San Bernardino, tra borghi, chiese e paesaggi storici della Toscana.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino di San Bernardo delle Alpi",
+  "descrizione": "Percorso piemontese legato alla tradizione di San Bernardo, tra Alpi, valichi, santuari e borghi storici.",
+  "regioni": [
+   "Piemonte"
+  ],
+  "sito": "santiagonovara.com"
+ },
+ {
+  "name": "Cammino di San Carlo",
+  "descrizione": "Itinerario piemontese legato a San Carlo Borromeo, tra Sacri Monti, santuari, borghi e paesaggi delle Alpi occidentali.",
+  "regioni": [
+   "Piemonte"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino di San Colombano",
+  "descrizione": "Percorso storico-religioso legato a San Colombano, tra Emilia-Romagna e Lombardia, lungo territori rurali, abbazie, borghi e vie storiche.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lombardia"
+  ],
+  "sito": "www.thecolumbanway.org"
+ },
+ {
+  "name": "Cammino di San Cristoforo",
+  "descrizione": "Cammino friulano che attraversa il territorio regionale collegando luoghi di culto, borghi, paesaggi rurali e montani.",
+  "regioni": [
+   "Friuli-Venezia Giulia"
+  ],
+  "sito": "camminodisancristoforo.com"
+ },
+ {
+  "name": "Cammino di San Felice da Nicosia",
+  "descrizione": "Percorso siciliano dedicato a San Felice da Nicosia, tra luoghi della sua vita, santuari, borghi e paesaggi delle Madonie.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.camminosanfelicedanicosia.it"
+ },
+ {
+  "name": "Cammino di San Filippo Neri",
+  "descrizione": "Itinerario laziale dedicato a San Filippo Neri, tra Roma e i luoghi della tradizione oratoriana e religiosa del territorio.",
+  "regioni": [
+   "Lazio"
+  ],
+  "sito": "www.camminodisanfilipponeri.com"
+ },
+ {
+  "name": "Cammino di San Francesco Caracciolo",
+  "descrizione": "Cammino interregionale dedicato a San Francesco Caracciolo, tra Abruzzo, Campania, Marche e Molise, collegando luoghi della sua vita e spiritualità.",
+  "regioni": [
+   "Abruzzo",
+   "Campania",
+   "Marche",
+   "Molise"
+  ],
+  "sito": "www.camminodisanfrancescocaracciolo.com"
+ },
+ {
+  "name": "Cammino di San Francesco da Rimini a La Verna",
+  "descrizione": "Percorso francescano tra Romagna e Toscana che collega Rimini al santuario della Verna, tra Appennino, borghi e luoghi francescani.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana"
+  ],
+  "sito": "www.camminosanfrancescoriminilaverna.it"
+ },
+ {
+  "name": "Cammino di San Francesco di Paola",
+  "descrizione": "Itinerario calabrese che ripercorre i luoghi della vita di San Francesco di Paola, tra conventi, santuari, borghi e paesaggi della Calabria.",
+  "regioni": [
+   "Calabria"
+  ],
+  "sito": "www.ilcamminodisanfrancesco.it"
+ },
+ {
+  "name": "Cammino di San Giacomo in Sicilia",
+  "descrizione": "Cammino siciliano dedicato a San Giacomo, tra luoghi di culto, borghi, campagne e testimonianze storiche dell’isola.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.camminosangiacomosicilia.it"
+ },
+ {
+  "name": "Cammino di San Giorgio Vescovo",
+  "descrizione": "Grande itinerario sardo dedicato a San Giorgio Vescovo, attraverso territori rurali, borghi, chiese e paesaggi dell’isola.",
+  "regioni": [
+   "Sardegna"
+  ],
+  "sito": "www.camminodisangiorgiovescovo.it"
+ },
+ {
+  "name": "Cammino di San Giovanni",
+  "descrizione": "Percorso lombardo legato alla tradizione di San Giovanni, tra luoghi religiosi, borghi e paesaggi collinari e prealpini.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "camminodisangiovanni.it"
+ },
+ {
+  "name": "Cammino di San Jacopo in Toscana",
+  "descrizione": "Percorso toscano verso Santiago, tra Firenze, Pistoia e la costa, con pievi, chiese, borghi e testimonianze del culto di San Jacopo.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": "www.ilcamminodisanjacopo.it"
+ },
+ {
+  "name": "Cammino di San Martino",
+  "descrizione": "Percorso ligure dedicato alla figura di San Martino, tra costa ed entroterra, borghi, chiese e paesaggi mediterranei.",
+  "regioni": [
+   "Liguria"
+  ],
+  "sito": "www.camminodisanmartino.org"
+ },
+ {
+  "name": "Cammino di San Michele",
+  "descrizione": "Grande itinerario dedicato all’Arcangelo Michele che attraversa diverse regioni italiane collegando luoghi micaelici, santuari e territori storici.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lazio",
+   "Lombardia",
+   "Molise",
+   "Piemonte",
+   "Puglia",
+   "Toscana"
+  ],
+  "sito": "www.camminodisanmichele.org"
+ },
+ {
+  "name": "Cammino di San Nilo",
+  "descrizione": "Itinerario campano dedicato a San Nilo di Rossano, tra Cilento, monasteri, borghi, chiese e paesaggi mediterranei.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": "camminibizantini.com"
+ },
+ {
+  "name": "Cammino di San Pellegrino",
+  "descrizione": "Percorso tra Emilia-Romagna e Toscana legato alla devozione di San Pellegrino, tra Appennino, santuari e borghi storici.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino di San Rocco",
+  "descrizione": "Itinerario trentino dedicato al culto di San Rocco, tra borghi alpini, chiese, boschi e paesaggi di montagna.",
+  "regioni": [
+   "Trentino-Alto Adige"
+  ],
+  "sito": "camminosanrocco.it"
+ },
+ {
+  "name": "Cammino di San Valentino",
+  "descrizione": "Percorso umbro dedicato a San Valentino e alla tradizione religiosa di Terni e dell’Umbria meridionale, tra borghi, chiese e paesaggi collinari.",
+  "regioni": [
+   "Umbria"
+  ],
+  "sito": "www.camminodisanvalentino.it"
+ },
+ {
+  "name": "Cammino di San Vicinio",
+  "descrizione": "Cammino tra Emilia-Romagna e Toscana dedicato a San Vicinio, tra Sarsina, Casentino, santuari, borghi e Appennino.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana"
+  ],
+  "sito": "camminodisanvicinio.it"
+ },
+ {
+  "name": "Cammino di Sant’Agostino",
+  "descrizione": "Grande itinerario mariano tra Piemonte, Lombardia e Liguria, collegando santuari, chiese, borghi e luoghi della tradizione agostiniana.",
+  "regioni": [
+   "Liguria",
+   "Lombardia",
+   "Piemonte"
+  ],
+  "sito": "www.camminodiagostino.it"
+ },
+ {
+  "name": "Cammino di Sant’Elena",
+  "descrizione": "Percorso molisano legato alla tradizione di Sant’Elena, tra borghi, chiese, campagne e paesaggi appenninici.",
+  "regioni": [
+   "Molise"
+  ],
+  "sito": "ilcamminodisantelena.altervista.org"
+ },
+ {
+  "name": "Cammino di Sant’Oronzo",
+  "descrizione": "Nuovo cammino pugliese dedicato a Sant’Oronzo, attraverso i luoghi della tradizione oronziana e il paesaggio del Salento.",
+  "regioni": [
+   "Puglia"
+  ],
+  "sito": "www.viacittaoronziane.it"
+ },
+ {
+  "name": "Cammino di Santa Giulia",
+  "descrizione": "Grande itinerario tra Toscana, Emilia-Romagna e Lombardia dedicato a Santa Giulia, tra abbazie, chiese, borghi e paesaggi appenninici e padani.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lombardia",
+   "Toscana"
+  ],
+  "sito": "ilcamminodisantagiulia.it"
+ },
+ {
+  "name": "Cammino di Santa Sinforosa, San Getulio e dei sette figli martiri",
+  "descrizione": "Breve percorso laziale dedicato ai martiri di Tivoli, tra luoghi archeologici, chiese e testimonianze del cristianesimo antico.",
+  "regioni": [
+   "Lazio"
+  ],
+  "sito": "www.camminodisantasinforosa.it"
+ },
+ {
+  "name": "Cammino di Santu Jacu",
+  "descrizione": "Grande rete di percorsi in Sardegna dedicata a San Giacomo, tra chiese, santuari, villaggi, coste e paesaggi dell’interno.",
+  "regioni": [
+   "Sardegna"
+  ],
+  "sito": "www.camminando.eu"
+ },
+ {
+  "name": "Cammino di Tindari",
+  "descrizione": "Percorso siciliano verso il Santuario di Tindari, tra Nebrodi, borghi, paesaggi costieri e luoghi della devozione mariana.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.ilcamminoditindari.org"
+ },
+ {
+  "name": "Cammino Francescano della Marca",
+  "descrizione": "Percorso tra Marche e Umbria sulle tracce della tradizione francescana, attraverso borghi, conventi, eremi e paesaggi appenninici.",
+  "regioni": [
+   "Marche",
+   "Umbria"
+  ],
+  "sito": "www.camminofrancescanodellamarca.it"
+ },
+ {
+  "name": "Cammino Francescano in Sardegna",
+  "descrizione": "Itinerario sardo legato alla presenza e alla spiritualità francescana, tra chiese, conventi, borghi e paesaggi dell’isola.",
+  "regioni": [
+   "Sardegna"
+  ],
+  "sito": "www.camminofrancescanoinsardegna.it"
+ },
+ {
+  "name": "Cammino Grande di Celestino",
+  "descrizione": "Itinerario abruzzese dedicato a Celestino V, tra Majella, eremi, abbazie, borghi e paesaggi montani.",
+  "regioni": [
+   "Abruzzo"
+  ],
+  "sito": "www.parcomajella.it"
+ },
+ {
+  "name": "Cammino Mariano dei Marsi",
+  "descrizione": "Percorso abruzzese dedicato alla devozione mariana nella Marsica, tra santuari, chiese, borghi e paesaggi appenninici.",
+  "regioni": [
+   "Abruzzo"
+  ],
+  "sito": "www.camminomarianodeimarsi.it"
+ },
+ {
+  "name": "Cammino Mariano delle Alpi – Via Occidentale",
+  "descrizione": "Percorso lombardo tra santuari mariani e paesaggi alpini, attraverso borghi e luoghi di devozione delle Alpi occidentali.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "camminomarianodellealpi.it"
+ },
+ {
+  "name": "Cammino Materano – Sei vie di fede nel Sud Italia",
+  "descrizione": "Rete di itinerari che collega Puglia, Basilicata, Campania e Molise attraverso antiche vie, gravine, borghi, cattedrali e luoghi di culto.",
+  "regioni": [
+   "Basilicata",
+   "Campania",
+   "Molise",
+   "Puglia"
+  ],
+  "sito": "camminomaterano.it"
+ },
+ {
+  "name": "Cammino Medievale",
+  "descrizione": "Percorso molisano attraverso antichi tracciati, borghi medievali, chiese e testimonianze storiche del territorio.",
+  "regioni": [
+   "Molise"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Cammino Montiano",
+  "descrizione": "Breve percorso lombardo dedicato alla spiritualità locale e ai luoghi religiosi del territorio, con prevalenza di ambiente collinare e rurale.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "www.camminomontiano.it"
+ },
+ {
+  "name": "Cammino San Vili",
+  "descrizione": "Itinerario trentino da Trento verso la Val Rendena, sulle tracce di San Vigilio, tra chiese, castelli, borghi e paesaggi alpini.",
+  "regioni": [
+   "Trentino-Alto Adige"
+  ],
+  "sito": "www.camminosanvili.it"
+ },
+ {
+  "name": "Cammino Via Flavia",
+  "descrizione": "Percorso storico-religioso in Friuli-Venezia Giulia lungo l’antica Via Flavia, tra Trieste, Carso, borghi, siti storici e paesaggi costieri.",
+  "regioni": [
+   "Friuli-Venezia Giulia"
+  ],
+  "sito": "www.camminoviaflavia.it"
+ },
+ {
+  "name": "Da Montefalco a Cascia: Sentieri di Rose",
+  "descrizione": "Percorso umbro tra Montefalco e Cascia, attraverso colline, borghi, santuari e luoghi legati alla devozione e alla tradizione locale.",
+  "regioni": [
+   "Umbria"
+  ],
+  "sito": "www.spoletonorcia.it"
+ },
+ {
+  "name": "Di qui passò Francesco… con le ali ai piedi",
+  "descrizione": "Grande itinerario francescano attraverso Abruzzo, Lazio, Molise, Puglia, Toscana e Umbria, collegando luoghi della memoria di San Francesco.",
+  "regioni": [
+   "Abruzzo",
+   "Lazio",
+   "Molise",
+   "Puglia",
+   "Toscana",
+   "Umbria"
+  ],
+  "sito": "www.diquipassofrancesco.it"
+ },
+ {
+  "name": "Il Cammino di Sant’Antonio",
+  "descrizione": "Grande itinerario dedicato a Sant’Antonio, che attraversa Veneto, Emilia-Romagna, Toscana e Friuli collegando luoghi antoniani e santuari.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana",
+   "Veneto",
+   "Friuli-Venezia Giulia"
+  ],
+  "sito": "www.ilcamminodisantantonio.org"
+ },
+ {
+  "name": "Iter Suasanum",
+  "descrizione": "Itinerario storico-religioso nelle Marche attorno all’antica Suasa, tra archeologia, borghi, chiese e paesaggio collinare.",
+  "regioni": [
+   "Marche"
+  ],
+  "sito": "www.itersuasanum.com"
+ },
+ {
+  "name": "Itinerarium Rosaliae",
+  "descrizione": "Cammino siciliano dedicato a Santa Rosalia, tra Palermo, l’entroterra e i luoghi della tradizione religiosa e naturalistica dell’isola.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.itinerariumrosaliae.it"
+ },
+ {
+  "name": "Le sette sorelle del Cilento",
+  "descrizione": "Nuovo itinerario campano che collega sette luoghi e comunità religiose del Cilento, valorizzando borghi, natura, patrimonio storico e devozione.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": "www.lesettesorelledelcilento.it"
+ },
+ {
+  "name": "Magna Via Francigena",
+  "descrizione": "Percorso siciliano tra Agrigento e Palermo, attraverso campagne, colline, borghi, siti storici e paesaggi dell’entroterra.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.viefrancigenedisicilia.it"
+ },
+ {
+  "name": "Romea Strata",
+  "descrizione": "Grande rete di vie storiche di pellegrinaggio che attraversa il Nord e il Centro Italia, collegando percorsi, borghi, abbazie e luoghi di culto.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lazio",
+   "Lombardia",
+   "Toscana",
+   "Veneto",
+   "Friuli-Venezia Giulia",
+   "Trentino-Alto Adige"
+  ],
+  "sito": "www.romeastrata.org"
+ },
+ {
+  "name": "Santuario Madonna del Carmelo",
+  "descrizione": "Breve itinerario campano legato al Santuario della Madonna del Carmelo e alla devozione mariana locale.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Sentier Transfrontalier",
+  "descrizione": "Percorso transfrontaliero della Valle d’Aosta legato alla tradizione del Colle del Gran San Bernardo, tra montagne, ospizi e luoghi di culto.",
+  "regioni": [
+   "Valle d’Aosta"
+  ],
+  "sito": "www.espacesanbernardo.eu"
+ },
+ {
+  "name": "Sentiero Beato Francesco Bonifacio",
+  "descrizione": "Percorso nel territorio del Carso e del Friuli-Venezia Giulia dedicato al beato Francesco Bonifacio, tra luoghi della sua vita e paesaggio carsico.",
+  "regioni": [
+   "Friuli-Venezia Giulia"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Sentiero dei due conventi",
+  "descrizione": "Breve itinerario pugliese che collega due conventi e luoghi di culto attraverso il paesaggio rurale locale.",
+  "regioni": [
+   "Puglia"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Sentiero dei Fioretti",
+  "descrizione": "Itinerario francescano tra Emilia-Romagna, Marche e Umbria, ispirato ai Fioretti di San Francesco e ai luoghi della tradizione francescana.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Marche",
+   "Umbria"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Sentiero dei Giganti",
+  "descrizione": "Breve percorso lombardo in ambiente naturale, associato a luoghi di interesse religioso e paesaggistico.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "sentierodeigiganti.org"
+ },
+ {
+  "name": "Sentiero di Maria",
+  "descrizione": "Percorso veneto dedicato alla devozione mariana, tra santuari, chiese, borghi e paesaggi delle Prealpi e della pianura.",
+  "regioni": [
+   "Veneto"
+  ],
+  "sito": "www.sentierodimaria.it"
+ },
+ {
+  "name": "Sui passi di Don Luigi Guanella",
+  "descrizione": "Percorso lombardo dedicato a don Luigi Guanella, tra luoghi della sua vita, opere sociali, chiese, borghi e paesaggi alpini.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "suipassididonguanella.org"
+ },
+ {
+  "name": "Sulle orme di San Bernardo. Cammini di fede, arte e natura",
+  "descrizione": "Itinerario siciliano che unisce devozione a San Bernardo, patrimonio artistico e paesaggi naturali dell’isola.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.sulleormedisanbernardo.it"
+ },
+ {
+  "name": "Trekking del Santo. Il Cammino Etna-Nebrodi di San Nicolò Politi",
+  "descrizione": "Percorso siciliano tra Etna e Nebrodi dedicato a San Nicolò Politi, tra boschi, montagne, borghi e luoghi di culto.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.trekkingdelsanto.it"
+ },
+ {
+  "name": "Via Amerina – tratto umbro",
+  "descrizione": "Percorso storico tra Umbria e Lazio lungo l’antica Via Amerina, tra borghi, necropoli, chiese, pievi e paesaggi rurali.",
+  "regioni": [
+   "Umbria"
+  ],
+  "sito": "www.camminodellaluce.it"
+ },
+ {
+  "name": "Via Carolingia – Tratto mantovano",
+  "descrizione": "Tratto lombardo della Via Carolingia, legato agli itinerari medievali e ai collegamenti storici tra Europa e Italia.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "www.viacarolingia.eu"
+ },
+ {
+  "name": "Via degli Abati",
+  "descrizione": "Antica via appenninica tra Emilia-Romagna, Lombardia e Toscana, legata ai pellegrinaggi verso Roma e al monastero di Bobbio.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lombardia",
+   "Toscana"
+  ],
+  "sito": "www.viadegliabati.com"
+ },
+ {
+  "name": "Via dei conventi di Padre Pio",
+  "descrizione": "Grande itinerario tra Campania, Molise e Puglia che collega conventi e luoghi della memoria di Padre Pio.",
+  "regioni": [
+   "Campania",
+   "Molise",
+   "Puglia"
+  ],
+  "sito": "www.laviadeiconventi.it"
+ },
+ {
+  "name": "Via dei Frati",
+  "descrizione": "Cammino siciliano attraverso conventi, chiese, borghi e paesaggi dell’isola, valorizzando la tradizione francescana e monastica.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "laviadeifrati.wordpress.com"
+ },
+ {
+  "name": "Via dei Monti o de Pontremolo",
+  "descrizione": "Percorso storico tra Liguria e Toscana attraverso i passi dell’Appennino, collegando borghi, pievi e antiche vie di pellegrinaggio.",
+  "regioni": [
+   "Liguria",
+   "Toscana"
+  ],
+  "sito": "www.viadeimonti.it"
+ },
+ {
+  "name": "Via dei Santuari Mariani nell’Anello del Nisi",
+  "descrizione": "Percorso siciliano ad anello tra santuari mariani e borghi della valle del Nisi, con forte caratterizzazione devozionale e paesaggistica.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Via del Volto Santo",
+  "descrizione": "Itinerario toscano legato al Volto Santo di Lucca, tra Garfagnana, Lunigiana, pievi, borghi e antichi percorsi appenninici.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": "www.viadelvoltosanto.info"
+ },
+ {
+  "name": "Via della Fede di San Pio",
+  "descrizione": "Grande percorso tra Campania, Molise e Puglia dedicato a Padre Pio, collegando luoghi della sua vita e della devozione.",
+  "regioni": [
+   "Campania",
+   "Molise",
+   "Puglia"
+  ],
+  "sito": "www.camminodipadrepio.it"
+ },
+ {
+  "name": "Via di Francesco – tratto umbro",
+  "descrizione": "Percorso umbro sulle tracce di San Francesco, tra Assisi, eremi, conventi, borghi e paesaggi della Valle Umbra e dell’Appennino.",
+  "regioni": [
+   "Umbria"
+  ],
+  "sito": "www.viadifrancesco.it"
+ },
+ {
+  "name": "Via di Francesco in Toscana",
+  "descrizione": "Itinerario toscano legato alla presenza francescana, tra santuari, eremi, borghi e paesaggi appenninici e collinari.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": "www.visittuscany.com"
+ },
+ {
+  "name": "Via di Francesco per Gerusalemme",
+  "descrizione": "Itinerario tra Marche e Umbria inserito nella tradizione dei percorsi francescani diretti simbolicamente verso Gerusalemme.",
+  "regioni": [
+   "Marche",
+   "Umbria"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Via di Sant’Anna",
+  "descrizione": "Percorso piemontese dedicato alla devozione a Sant’Anna, tra Valle Stura, Alpi, santuari e borghi montani.",
+  "regioni": [
+   "Piemonte"
+  ],
+  "sito": "www.visitstura.it"
+ },
+ {
+  "name": "Via Fabaria",
+  "descrizione": "Cammino siciliano di lunga percorrenza che attraversa l’isola collegando antichi tracciati, borghi, chiese e luoghi di pellegrinaggio.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.viefrancigenedisicilia.it"
+ },
+ {
+  "name": "Via Francesca della Sambuca",
+  "descrizione": "Antico itinerario tra Emilia-Romagna e Toscana attraverso l’Appennino, collegando borghi, pievi e percorsi storici di pellegrinaggio.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana"
+  ],
+  "sito": "www.viafrancescadellasambuca.it"
+ },
+ {
+  "name": "Via Francigena",
+  "descrizione": "Grande itinerario europeo di pellegrinaggio verso Roma, attraversando il territorio italiano dalla Valle d’Aosta al Sud attraverso borghi, città, pievi e paesaggi molto diversi.",
+  "regioni": [
+   "Basilicata",
+   "Campania",
+   "Emilia-Romagna",
+   "Lazio",
+   "Liguria",
+   "Lombardia",
+   "Piemonte",
+   "Puglia",
+   "Toscana",
+   "Valle d’Aosta"
+  ],
+  "sito": "www.viefrancigene.org"
+ },
+ {
+  "name": "Via Francigena Normanna da Palermo a Messina",
+  "descrizione": "Itinerario siciliano tra Palermo e Messina attraverso l’entroterra dell’isola, con borghi, chiese, paesaggi montani e testimonianze normanne.",
+  "regioni": [
+   "Sicilia"
+  ],
+  "sito": "www.viefrancigenedisicilia.it"
+ },
+ {
+  "name": "Via Francigena Renana",
+  "descrizione": "Percorso lombardo collegato alle direttrici storiche provenienti dal Nord Europa, tra pianura, borghi, chiese e vie storiche.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "www.iubilantes.it"
+ },
+ {
+  "name": "Via Francisca del Lucomagno",
+  "descrizione": "Itinerario storico di collegamento tra il passo del Lucomagno e Pavia, attraverso Lombardia e antiche vie di pellegrinaggio.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "www.laviafrancisca.org"
+ },
+ {
+  "name": "Via Lauretana",
+  "descrizione": "Storica via di pellegrinaggio verso Loreto, tra Marche e Umbria, attraverso borghi, santuari, colline e paesaggi dell’Italia centrale.",
+  "regioni": [
+   "Marche",
+   "Umbria"
+  ],
+  "sito": "camminilauretani.eu"
+ },
+ {
+  "name": "Via Lauretana in Toscana",
+  "descrizione": "Itinerario toscano della tradizione lauretana, tra Firenze, Siena e i territori collinari, con pievi, borghi e luoghi di culto.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": "www.visittuscany.com"
+ },
+ {
+  "name": "Via Mater Dei",
+  "descrizione": "Cammino tra Emilia-Romagna e Toscana dedicato alla devozione mariana, collegando santuari, borghi e paesaggi dell’Appennino.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Toscana"
+  ],
+  "sito": null
+ },
+ {
+  "name": "Via Matildica del Volto Santo",
+  "descrizione": "Percorso tra Lombardia, Emilia-Romagna e Toscana legato a Matilde di Canossa e al Volto Santo di Lucca, tra castelli, pievi, borghi e Appennino.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lombardia",
+   "Toscana"
+  ],
+  "sito": "www.viamatildica.it"
+ },
+ {
+  "name": "Via Micaelica Molisana",
+  "descrizione": "Itinerario tra Lazio, Molise e Puglia legato alla devozione dell’Arcangelo Michele, tra santuari, montagne, tratturi e borghi.",
+  "regioni": [
+   "Lazio",
+   "Molise",
+   "Puglia"
+  ],
+  "sito": "www.camminidelsannio.it"
+ },
+ {
+  "name": "Via Raetia",
+  "descrizione": "Percorso lombardo alpino tra paesaggi montani, luoghi di culto, testimonianze storiche e siti archeologici dell’area della Valle Camonica.",
+  "regioni": [
+   "Lombardia"
+  ],
+  "sito": "viaraetia.org"
+ },
+ {
+  "name": "Via Regia de la Cava",
+  "descrizione": "Percorso campano legato alla tradizione storica e religiosa della Cava, tra abbazie, borghi e paesaggi dei Monti Lattari.",
+  "regioni": [
+   "Campania"
+  ],
+  "sito": "www.laviaregiadelacava.it"
+ },
+ {
+  "name": "Via Romea Germanica",
+  "descrizione": "Antica direttrice di pellegrinaggio verso Roma attraverso Germania, Austria e Italia; nel tratto italiano attraversa Veneto, Trentino, Emilia-Romagna, Toscana, Umbria e Lazio.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lazio",
+   "Toscana",
+   "Umbria",
+   "Veneto",
+   "Trentino-Alto Adige"
+  ],
+  "sito": "www.guidaromea.eu"
+ },
+ {
+  "name": "Via Romea Germanica Imperiale",
+  "descrizione": "Grande itinerario storico attraverso Emilia-Romagna, Lombardia, Toscana, Veneto e Trentino, seguendo antiche direttrici imperiali e di pellegrinaggio.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Lombardia",
+   "Toscana",
+   "Veneto",
+   "Trentino-Alto Adige"
+  ],
+  "sito": "www.viargimperiale.it"
+ },
+ {
+  "name": "Via Romea Nonantolana",
+  "descrizione": "Antico percorso emiliano da Nonantola verso l’Appennino, tra abbazie, borghi, colline e testimonianze medievali.",
+  "regioni": [
+   "Emilia-Romagna"
+  ],
+  "sito": "www.viaromeanonantolana.org"
+ },
+ {
+  "name": "Via Romea Sanese",
+  "descrizione": "Percorso storico tra Firenze e Siena, attraverso Chianti, pievi, castelli, borghi medievali e paesaggi collinari toscani.",
+  "regioni": [
+   "Toscana"
+  ],
+  "sito": "www.visittuscany.com"
+ },
+ {
+  "name": "Viae Sancti Romualdi (Cammino di San Romualdo)",
+  "descrizione": "Itinerario tra Emilia-Romagna, Marche, Toscana e Umbria legato a San Romualdo e alla tradizione camaldolese, tra eremi, monasteri e Appennino.",
+  "regioni": [
+   "Emilia-Romagna",
+   "Marche",
+   "Toscana",
+   "Umbria"
+  ],
+  "sito": "www.viaesanctiromualdi.it"
+ }
+]

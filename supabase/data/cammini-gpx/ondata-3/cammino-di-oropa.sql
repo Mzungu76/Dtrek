@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values ($q$Cammino di Oropa$q$, 'cammino', 45.499151, 7.953689, $q$Piemonte$q$, $q$https://www.camminodioropa.it/$q$, 'gpx', 'cammino/cammino-di-oropa', 0.9,
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino di Oropa$q$, 'cammino', $q$Itinerario piemontese verso il Santuario di Oropa, tra Biellese, montagne, borghi, santuari e paesaggi alpini.$q$, 45.499151, 7.953689, $q$Piemonte$q$, $q$https://www.camminodioropa.it/$q$, 'gpx', 'cammino/cammino-di-oropa', 0.9,
     $q${"kind":"cammino","theme":"religioso","lengthM":63352,"tappeCount":4,"tappeSource":"official","start":{"name":"Santhià","lat":45.363959,"lon":8.179913},"end":{"name":"Santuario di Oropa","lat":45.626018,"lon":7.982387},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":4,"totalKm":64.7,"connected":true,"maxTappaKm":17.6,"namedShare":1,"officialTappe":4,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$wc{sGms|p@mMtd@qj@~IosAthAkLjkAiJqAlPpEcLrHs@h]kdAc@uJ|Qb\xzEsOtTyPaHsMn~@iTnVa_AjJ}W`ZhWxiAqgAlbBu`AdBimBb~F_a@RxF`VbLuBwCv_@}xAlzDyyB~mCaa@_z@_Gww@zGeDig@tzArUjMuYfo@uUncCoeArlBmGwZqZrS_i@w`@nHoRwPmF}Omy@sQiF`QeqAu[fGg{Aab@kOgt@|HgPsO~L_X_UiHvQwNc[o^uBhXy_AmHwFjQ}Sa]sMun@e}@oFahA{Ni@cRlf@um@cfAqKXcz@jtAmGuIuh@fo@us@rJ$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

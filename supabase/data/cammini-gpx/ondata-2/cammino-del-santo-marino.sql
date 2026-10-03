@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values ($q$Cammino del Santo Marino$q$, 'cammino', 43.935334, 12.44533, $q$Italia$q$, $q$https://www.sanmarinoexperience.com/il-cammino-del-santo-marino/$q$, 'gpx', 'cammino/cammino-del-santo-marino', 0.75,
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino del Santo Marino$q$, 'cammino', $q$Percorso tra Emilia-Romagna e San Marino legato alla figura di San Marino e alla storia religiosa del territorio, tra borghi e paesaggi collinari.$q$, 43.935334, 12.44533, $q$Italia$q$, $q$https://www.sanmarinoexperience.com/il-cammino-del-santo-marino/$q$, 'gpx', 'cammino/cammino-del-santo-marino', 0.75,
     $q${"kind":"cammino","theme":"religioso","lengthM":74906,"tappeCount":4,"tappeSource":"official","start":{"name":null,"lat":44.059217,"lon":12.568547},"end":{"name":null,"lat":43.817146,"lon":12.276432},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":4,"totalKm":76.4,"connected":true,"maxTappaKm":21.8,"namedShare":0,"officialTappe":0,"computedTappe":4,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$ci|kGmxukAuX~Z]riAgKfGjY~oA__@taBqGbwAbWfc@`aAxe@qGl`Dta@t_BrcDneFpjExzAhw@}KcJhElCuPpaAeh@d^tLtAdXl]xa@ro@wW`|@HyG{l@dNoKyYaaAjj@sfAsByX{LyBmInSuXaTN{_AiLyItViWdMhLhGwVzWf@`Grq@_R`XbLOF|_@ph@gz@~{AiBnGpi@jTfRkIji@vi@gUiClw@f~Ax]k\`VyAlU~f@dXlBxm@zWzLaAfh@h[|P}GnR`Kxl@is@GiZ|ZxHfaB{RyCcRzn@nShPtBjl@dI_Yll@mHxj@_rAdLh\vdAnn@lQzeBzgAtx@|g@raA~h@w`@rCn^|i@ne@bNns@hQwBo@xUvgAnF{Gr\nJ|UcVdt@hCha@$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)

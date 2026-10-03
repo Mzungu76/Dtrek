@@ -8,7 +8,8 @@ import { encodePolyline } from '../../../lib/cammini/polylineCodec'
 import { splitIntoTappe, type TappaAnchor } from '../../../lib/cammini/tappe'
 import { chainSegments, decodeXmlText, parseTrackFile, type ParsedTrack } from '../../../lib/cammini/trackParse'
 import { WAVES } from './tracks'
-import { officialUrlFor } from './tracks/ministero'
+import { normalizeSiteUrl } from '../../../lib/cammini/officialUrl'
+import { DESCRIZIONI, descriptionFor, officialUrlFor } from './tracks/ministero'
 import type { CamminoSpec, TappaSpec } from './tracks/types'
 
 // Importa cammini da file GPX/KML (tracce ufficiali degli enti) in dtrek_places + dtrek_cammino_tappe.
@@ -192,11 +193,11 @@ export function camminoSql(b: BuiltTrackCammino): string {
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values (${sqlStr(spec.name)}, 'cammino', ${lat}, ${lon}, ${sqlStr(spec.region)}, ${sqlStr(officialUrlFor(spec.id))}, '${SOURCE}', '${sid}', ${b.tappeSource === 'official' ? 0.9 : b.tappeSource === 'mixed' ? 0.8 : 0.75},
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values (${sqlStr(spec.name)}, 'cammino', ${sqlStr(descriptionFor(spec.id))}, ${lat}, ${lon}, ${sqlStr(spec.region)}, ${sqlStr(officialUrlFor(spec.id))}, '${SOURCE}', '${sid}', ${b.tappeSource === 'official' ? 0.9 : b.tappeSource === 'mixed' ? 0.8 : 0.75},
     ${sqlStr(JSON.stringify(meta))}::jsonb || jsonb_build_object('overviewPolyline', ${poly(simplifyPolyline(b.line, OVERVIEW_TOLERANCE_M))}))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)
@@ -287,7 +288,26 @@ from (values
 where p.source = '${SOURCE}' and p.source_id = v.source_id;`
 }
 
+/** SQL che compila solo description dei cammini già importati (tutte le ondate), più la Via Francigena OSM se è ancora senza testo. */
+export function descriptionsSql(): string {
+  const rows = Object.values(WAVES).flat().map(s => ({ id: s.id, d: descriptionFor(s.id) })).filter((r): r is { id: string; d: string } => !!r.d)
+  const fr = DESCRIZIONI.find(e => e.name === 'Via Francigena')
+  return `-- Descrizioni brevi dal file del catalogo (sintesi informative, da verificare sui siti ufficiali). Idempotente; non tocca altri campi.
+update dtrek_places p set description = v.d
+from (values
+  ${rows.map(r => `('cammino/${r.id}', ${sqlStr(r.d)})`).join(',\n  ')}
+) v(source_id, d)
+where p.source = '${SOURCE}' and p.source_id = v.source_id;
+${fr ? `
+-- Via Francigena (importata da OpenStreetMap): solo se manca il testo o il sito.
+update dtrek_places set description = coalesce(description, ${sqlStr(fr.descrizione)}),
+  official_url = coalesce(official_url, ${sqlStr(normalizeSiteUrl(fr.sito))})
+where source = 'osm' and source_id = 'cammino/via-francigena';` : ''}`
+}
+
 function main() {
+  const descOut = arg('desc-sql')
+  if (descOut) { fs.mkdirSync(path.dirname(descOut), { recursive: true }); fs.writeFileSync(descOut, descriptionsSql()); console.log(`Scritto ${descOut}`); return }
   const urlsOut = arg('urls-sql')
   if (urlsOut) { fs.mkdirSync(path.dirname(urlsOut), { recursive: true }); fs.writeFileSync(urlsOut, officialUrlsSql()); console.log(`Scritto ${urlsOut}`); return }
   const src = arg('src'), wave = Number(arg('wave'))

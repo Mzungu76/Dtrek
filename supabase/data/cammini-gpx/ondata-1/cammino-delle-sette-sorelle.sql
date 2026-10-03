@@ -20,11 +20,11 @@ end $f$;
 do $do$
 declare pid uuid;
 begin
-  insert into dtrek_places (name, meta_type, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
-  values ($q$Cammino delle Sette Sorelle$q$, 'cammino', 42.584741657863475, 13.493987709864165, $q$Abruzzo$q$, $q$http://www.camminodellesettesorelle.it/$q$, 'gpx', 'cammino/cammino-delle-sette-sorelle', 0.9,
+  insert into dtrek_places (name, meta_type, description, latitude, longitude, region, official_url, source, source_id, confidence, metadata)
+  values ($q$Cammino delle Sette Sorelle$q$, 'cammino', $q$Nuovo itinerario abruzzese dedicato a una rete di luoghi religiosi e comunità locali, attraverso paesaggi e borghi dell’Appennino.$q$, 42.584741657863475, 13.493987709864165, $q$Abruzzo$q$, $q$http://www.camminodellesettesorelle.it/$q$, 'gpx', 'cammino/cammino-delle-sette-sorelle', 0.9,
     $q${"kind":"cammino","theme":"naturalistico","lengthM":124294,"tappeCount":7,"tappeSource":"official","start":{"name":null,"lat":42.553051342288526,"lon":13.536035920661998},"end":{"name":null,"lat":42.551986,"lon":13.538931},"ref":null,"network":null,"trackSource":"gpx","quality":{"status":"pronto","reasons":[],"tappe":7,"totalKm":130.1,"connected":true,"maxTappaKm":22.4,"namedShare":0,"officialTappe":7,"computedTappe":0,"longTappe":0,"shortTappe":0}}$q$::jsonb || jsonb_build_object('overviewPolyline', pg_temp.dpoly($q$qcvbGgwrqAzIec@~e@iBpTfUsG|XhMpj@fBo^zYub@uB{TbOGdQu]j`A}PuNsOyBys@cZoItIi\gPbG}VoP}XzWmm@f@aNae@pGp[sv@\bGyd@u^{m@rIgKae@eU}]~KkMmJp@soCg^xSnVhXuLbZbLzRwDhVu@_VqZ_VfAb{@_h@{nCyV{HkwAraBfBfw@zb@lSlWuj@bEx\pYdVuKhYfDfVxXn[p\~ByCte@hg@gUhPdb@zNvA{B`]tl@bKms@zn@uq@aJaSh\cvAxh@yPjt@sPpKoc@aSmHtS_`@qE|Dkf@qJ~@{Uyq@eUnTqTyIo_@nMkRaIcAmZ{AzKl]h_BmKbTjOrI{Hze@fa@|QvJpv@vIqJt\t]nQsV|E~UfP|BbbAq`@ph@rx@pj@nJ{U_ACjo@gPiXgRn\nGjMwb@lKvOnn@_l@zjA~c@fnAxkA_SDgQjk@a^tHk\sCzkAbYsIaArWh_@r{@bc@lQjOqgBeMncB~MiAhYho@}CtcAxToB`m@pl@xj@hOjEzTlBgZnc@dCsb@_CsJhgA_d@d_@y_AjiBan@l[xoAqvArG_cBvUm_@cp@sh@zvAbYor@mwAfEkx@_Umh@sFgcAm`@s}AB}S`MxYhz@`\ub@cw@lBos@oTmIeHzP}DaUyQiDh@lJu_@om@t]sXeMmPxJaYaTgI|XegAhVjCr`@u]sSUvEy^gRdG_XaWxSmQcDci@lF`QrTgr@tNdUbFeZac@zNuC{R$q$)))
   on conflict (source, source_id) do update set name = excluded.name, latitude = excluded.latitude, longitude = excluded.longitude,
-    region = excluded.region, official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
+    region = excluded.region, description = coalesce(excluded.description, dtrek_places.description), official_url = coalesce(excluded.official_url, dtrek_places.official_url), confidence = excluded.confidence, metadata = excluded.metadata
   returning id into pid;
 
   insert into dtrek_place_sources (place_id, source, source_id, raw_type, confidence, last_synced_at)
