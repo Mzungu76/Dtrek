@@ -114,6 +114,61 @@ Workflow `Import Cammini del registro`, campo `registryId`: un id (`via-francige
 
 **Se un cammino cade**: rilancia lo stesso workflow (stesso `registryId`, o solo l'id del cammino): riparte dalla cache, non da zero. Se Overpass è giù per ore, riprova più tardi; per un cammino enorme usa direttamente il suo id. I cammini «da rivedere» non sono errori: leggi i motivi nel riepilogo.
 
+### 7.2 Se Overpass pubblico resta sovraccarico: import offline
+
+I server pubblici di Overpass a volte rispondono "the server is probably too busy" per ore di fila
+(non è un errore della query: anche una lettura per id va in timeout). In quel caso si può evitare del
+tutto Overpass, scaricando una volta i dati OSM dell'Italia ed estraendo i cammini in locale:
+
+1. **Scarica una volta** l'estratto Italia (circa 1,5 GB), es. da Geofabrik:
+   ```
+   curl -LO https://download.geofabrik.de/europe/italy-latest.osm.pbf
+   ```
+2. **Installa `osmium-tool`** (una volta): `apt install osmium-tool` (Linux) o `brew install osmium-tool` (macOS).
+3. **Estrai** tutte le relazioni a piedi d'Italia in un unico file (qualche minuto, una sola chiamata a
+   `osmium tags-filter` che risolve da sola sotto-relazioni e geometria delle way):
+   ```
+   npx tsx scripts/places/cammini/offlineExtract.ts --pbf italy-latest.osm.pbf --out /tmp/italy-routes.json
+   ```
+4. **Importa** usando quel file al posto del download live, per un cammino o per tutti:
+   ```
+   npx tsx scripts/places/cammini/import-registry.ts --id tutti --shared-fixture /tmp/italy-routes.json
+   npx tsx scripts/places/cammini/import-registry.ts --id tutti --shared-fixture /tmp/italy-routes.json --write
+   ```
+
+Il file `.pbf` si scarica una volta e si riusa; l'estrazione (passo 3) va ripetuta solo se serve un dato
+più recente. Il resto della pipeline (ordine delle tappe, filtro Italia, qualità, scrittura) è identico
+al percorso con Overpass: non cambia nulla per come i cammini vengono costruiti o scritti, cambia solo
+da dove arrivano relazioni e way.
+
+### 7.3 Via Francigena: da GPX ufficiali, non da OSM
+
+Le relazioni OSM della Francigena non si incatenano in un unico tracciato: le regionali hanno sia un
+pezzo di percorso proprio sia sotto-relazioni, e `buildFromRegistry` oggi considera solo le relazioni
+"foglia pura" (own tracciato, nessuna sotto-relazione) — un limite noto del codice condiviso con tutti
+gli altri cammini, non corretto qui per non rischiare di cambiare risultati che oggi funzionano (San
+Benedetto compreso). Per la Francigena, importa dai GPX ufficiali delle tappe invece che da Overpass:
+
+```
+npx tsx scripts/places/cammini/importFromGpx.ts --zip Via-Francigena.zip \
+  --folder "01a - Colle Gran San Bernardo - Roma" --id via-francigena --name "Via Francigena" --theme religioso
+npx tsx scripts/places/cammini/importFromGpx.ts --zip Via-Francigena.zip \
+  --folder "02 - Roma - Santa Maria di Leuca" --id via-francigena-sud --name "Via Francigena del Sud" --theme religioso
+```
+
+Lo zip ha una cartella per tratto, un file GPX per tappa numerata (`tappa-NN-...gpx`); i file con
+"variante" nel nome non entrano nella sequenza principale. Richiede `unzip` in PATH (oppure `--dir`
+su una cartella già estratta). Entrambi i tratti sono scritti in Supabase: Gran San Bernardo–Roma
+**pronto** (992 km, 45 tappe, 14 varianti, tutte connesse); Roma–Leuca **da rivedere** (797 km, 38
+tappe, 8 varianti) per 7 numeri di tappa contesi nella fonte stessa — il nome del file e il `<name>`
+dentro il GPX sono scalati di una posizione da un certo punto in poi (non un bug di questo script),
+quindi non appare in ricerca finché qualcuno non lo rivede a mano e lo promuove a `pronto`.
+
+Per importare un nuovo cammino da GPX con questo stesso procedimento (incluse le varianti, che
+`importFromGpx.ts` scrive in `dtrek_cammino_tappe_varianti`), vedi la skill
+`.claude/skills/import-cammino-gpx/SKILL.md` — pensata per essere seguita anche da una sessione che
+non ha visto questo lavoro.
+
 ## 8. Fase 3 — ricerca e scheda (in app)
 
 - `lib/metaSearch/searchCammini.ts` (+ `meta-search` accetta `metaType: 'cammino'`): solo cammini con qualità **pronto**; con un'origine conta il **tracciato** entro il raggio, non il pin.

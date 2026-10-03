@@ -81,6 +81,7 @@ describe('piano Overpass', () => {
     expect(backoffMs(2, 0.5)).toBe(120_000)
     expect(backoffMs(1, 0)).toBe(45_000)
     expect(backoffMs(1, 0.999)).toBeLessThan(75_000)
+    expect(backoffMs(20, 0.5)).toBe(300_000) // tetto a 5 minuti
   })
 })
 
@@ -101,5 +102,16 @@ describe('radici per id', () => {
     const q = rootsQuery(REGISTRY.find(x => x.id === 'via-francigena')!)
     expect(q).toContain('rel(id:955907)')
     expect(q).not.toContain('name')
+  })
+})
+
+describe('parametri delle query', () => {
+  it('niente maxsize e timeout contenuti (Overpass rifiuta le query che chiedono molto)', async () => {
+    const { rootsQuery, relationsByIdQuery, italyQuery, waysQuery } = await import('../cammini/overpassQueries')
+    const e = REGISTRY.find(x => x.id === 'via-francigena')!
+    for (const q of [rootsQuery(e), relationsByIdQuery([1]), italyQuery([1]), waysQuery([1])]) {
+      expect(q).not.toContain('maxsize')
+      expect(Number(/timeout:(\d+)/.exec(q)![1])).toBeLessThanOrEqual(180)
+    }
   })
 })

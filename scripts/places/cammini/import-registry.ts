@@ -18,7 +18,9 @@ import { importCammino } from './import'
 // Uso:
 //   npx tsx scripts/places/cammini/import-registry.ts --id cammino-san-benedetto            (dry-run)
 //   npx tsx scripts/places/cammini/import-registry.ts --id cammino-san-benedetto --write
-//   --save-fixture <file> / --fixture <file>: salva/rilegge la risposta grezza (build offline)
+//   --save-fixture <file> / --fixture <file>: salva/rilegge la risposta grezza di UN cammino (build offline)
+//   --shared-fixture <file>: relazioni+way estratte una volta da offlineExtract.ts, condivise da tutti i
+//     cammini (anche con --id tutti/ondata-N) — alternativa al download live quando Overpass è sovraccarico
 //   --min-status pronto|da_rivedere (con --write: scrive solo i cammini almeno a quel livello; default pronto)
 //
 // --id accetta un id, il nome ("Via Francigena"), `tutti` oppure `ondata-1|2|3`. Con più cammini: continua dopo gli
@@ -65,6 +67,8 @@ interface Ctx {
   minStatus: string
   fixture?: string
   saveFixture?: string
+  /** Relazioni+way già estratte offline (offlineExtract.ts): una sola lettura, condivisa da tutti i cammini. */
+  shared?: { relations: OverpassRelation[]; ways: Map<number, WayGeometry> }
 }
 
 /** Scarica (o rilegge), costruisce, controlla e — con write — scrive un cammino. Una riga per cammino costruito (la Francigena ne dà due). */
@@ -76,6 +80,8 @@ async function processEntry(entry: RegistryEntry, ctx: Ctx): Promise<RunRow[]> {
     const raw = JSON.parse(fs.readFileSync(ctx.fixture, 'utf8')) as { relations: OverpassRelation[]; ways: [number, WayGeometry][] }
     relations = raw.relations
     raw.ways.forEach(([wid, g]) => ways.set(wid, g))
+  } else if (ctx.shared) {
+    ({ relations, ways } = ctx.shared)
   } else {
     ({ relations, ways } = await downloadCammino(entry))
     if (ctx.saveFixture) fs.writeFileSync(ctx.saveFixture, JSON.stringify({ relations, ways: Array.from(ways.entries()) }))
@@ -100,6 +106,13 @@ async function processEntry(entry: RegistryEntry, ctx: Ctx): Promise<RunRow[]> {
     rows.push({ ...base, outcome: 'scritto', detail: `${stats.tappeWritten} tappe scritte, ${stats.tappeRemoved} rimosse`, durationS: (Date.now() - t0) / 1000 })
   }
   return rows
+}
+
+/** Un'estrazione offline (offlineExtract.ts) condivisa da tutti i cammini: letta una sola volta. */
+function loadSharedFixture(file: string | undefined): Ctx['shared'] {
+  if (!file) return undefined
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as { relations: OverpassRelation[]; ways: [number, WayGeometry][] }
+  return { relations: raw.relations, ways: new Map(raw.ways) }
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -137,6 +150,7 @@ async function main() {
     anchors: borghi.map(b => ({ id: b.id, name: b.name, lat: b.lat, lon: b.lon, population: b.population })),
     isItalian: (lat, lon) => nearestKm(lat, lon) <= NEAR_ITALY_KM,
     fixture: arg('fixture'), saveFixture: arg('save-fixture'),
+    shared: loadSharedFixture(arg('shared-fixture')),
   }
 
   // Un cammino che cade non ferma gli altri; i falliti si riprovano una volta in coda (la cache su disco

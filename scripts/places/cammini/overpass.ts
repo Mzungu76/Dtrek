@@ -9,7 +9,8 @@ export const OVERPASS_ENDPOINTS = [
   'https://overpass.private.coffee/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
-const ROUNDS = 4
+// Overpass pubblico spesso è «too busy» per decine di minuti (504/502, remark dispatcher): si insiste con pazienza.
+const ROUNDS = 8
 /** Tempo massimo di attesa per una singola richiesta (il [timeout:300] della query + margine). */
 const REQUEST_TIMEOUT_MS = 330_000
 
