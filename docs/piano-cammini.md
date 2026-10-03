@@ -141,6 +141,27 @@ più recente. Il resto della pipeline (ordine delle tappe, filtro Italia, qualit
 al percorso con Overpass: non cambia nulla per come i cammini vengono costruiti o scritti, cambia solo
 da dove arrivano relazioni e way.
 
+### 7.3 Via Francigena: da GPX ufficiali, non da OSM
+
+Le relazioni OSM della Francigena non si incatenano in un unico tracciato: le regionali hanno sia un
+pezzo di percorso proprio sia sotto-relazioni, e `buildFromRegistry` oggi considera solo le relazioni
+"foglia pura" (own tracciato, nessuna sotto-relazione) — un limite noto del codice condiviso con tutti
+gli altri cammini, non corretto qui per non rischiare di cambiare risultati che oggi funzionano (San
+Benedetto compreso). Per la Francigena, importa dai GPX ufficiali delle tappe invece che da Overpass:
+
+```
+npx tsx scripts/places/cammini/importFromGpx.ts --zip Via-Francigena.zip \
+  --folder "01a - Colle Gran San Bernardo - Roma" --id via-francigena --name "Via Francigena" --theme religioso
+npx tsx scripts/places/cammini/importFromGpx.ts --zip Via-Francigena.zip \
+  --folder "02 - Roma - Santa Maria di Leuca" --id via-francigena-sud --name "Via Francigena del Sud" --theme religioso
+```
+
+Lo zip ha una cartella per tratto, un file GPX per tappa numerata (`tappa-NN-...gpx`); i file con
+"variante" nel nome non entrano nella sequenza principale. Richiede `unzip` in PATH. Verificato sui
+GPX ufficiali reali: il tratto Gran San Bernardo–Roma risulta **pronto** (992 km, 45 tappe, tutte
+connesse); il tratto Roma–Leuca resta **da rivedere** per 7 scarti reali fra tappe nella fonte stessa
+(non un bug di questo script) — va controllato a mano prima di scriverlo con `--min-status da_rivedere`.
+
 ## 8. Fase 3 — ricerca e scheda (in app)
 
 - `lib/metaSearch/searchCammini.ts` (+ `meta-search` accetta `metaType: 'cammino'`): solo cammini con qualità **pronto**; con un'origine conta il **tracciato** entro il raggio, non il pin.
